@@ -1,0 +1,23 @@
+{
+  "name": "starlyclub_server",
+  "version": "1.0.0",
+  "description": "Backend API for Starly Club App",
+  "main": "server.js",
+  "type": "module", 
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js"
+  },
+  "keywords": [],
+  "author": "Nader Mohamed Shafik",
+  "license": "ISC",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.18.2",
+    "mongoose": "^8.3.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.10"
+  }
+}
