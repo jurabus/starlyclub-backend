@@ -1,14 +1,26 @@
 import express from "express";
 import {
-  createOffer, getOffers, getFeaturedOffers, getOffer, updateOffer, deleteOffer
+  createOffer,
+  getOffers,
+  getFeaturedOffers,
+  updateOffer,
+  deleteOffer,
+  uploadOfferImage,
 } from "../controllers/offerController.js";
+
 const router = express.Router();
 
-router.post("/", createOffer);
+// GET
 router.get("/", getOffers);
 router.get("/featured/list", getFeaturedOffers);
-router.get("/:id", getOffer);
-router.put("/:id", updateOffer);
+
+// POST (supports image upload)
+router.post("/", uploadOfferImage, createOffer);
+
+// PUT (supports image upload)
+router.put("/:id", uploadOfferImage, updateOffer);
+
+// DELETE
 router.delete("/:id", deleteOffer);
 
 export default router;
