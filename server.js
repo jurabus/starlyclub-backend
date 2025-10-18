@@ -1,7 +1,16 @@
 import mongoose from "mongoose";
 import dotenv from "dotenv";
 import express from "express";
+import joinRequestRoutes from "./routes/joinRequestRoutes.js";
+import universityAuthRoutes from "./routes/universityAuthRoutes.js";
+import providerRoutes from "./routes/providerRoutes.js";
+import offerRoutes from "./routes/offerRoutes.js";
 
+app.use("/api/providers", providerRoutes);
+app.use("/api/offers", offerRoutes);
+
+app.use("/api/university", universityAuthRoutes);
+app.use("/api/join-request", joinRequestRoutes);
 dotenv.config();
 
 const app = express();
