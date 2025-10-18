@@ -1,19 +1,16 @@
 import mongoose from "mongoose";
 
-const joinRequestSchema = new mongoose.Schema(
-  {
-    name: String,
-    jobTitle: String,
-    email: String,
-    mobile: String,
-    company: String,
-    industry: String,
-    branches: String,
-    socialUrl: String,
-    platform: String,
-    website: String,
-  },
-  { timestamps: true }
-);
+const joinRequestSchema = new mongoose.Schema({
+  name: { type: String, required: true },
+  job: { type: String, required: true },
+  mobile: { type: String, required: true },
+  email: { type: String, required: true },
+  company: { type: String, required: true },
+  industry: { type: String, required: true },
+  branches: { type: String, required: true },
+  social: { type: String, required: true },
+  website: { type: String },
+  createdAt: { type: Date, default: Date.now },
+});
 
 export default mongoose.model("JoinRequest", joinRequestSchema);
