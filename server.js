@@ -1,6 +1,7 @@
 import express from "express";
 import mongoose from "mongoose";
 import dotenv from "dotenv";
+import cors from "cors";
 
 import joinRequestRoutes from "./routes/joinRequestRoutes.js";
 import universityAuthRoutes from "./routes/universityAuthRoutes.js";
@@ -8,14 +9,14 @@ import providerRoutes from "./routes/providerRoutes.js";
 import offerRoutes from "./routes/offerRoutes.js";
 
 dotenv.config();
-
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Middleware
+// Middlewares
+app.use(cors());
 app.use(express.json());
 
-// ✅ MongoDB connection
+// MongoDB connection
 const connectDB = async () => {
   try {
     await mongoose.connect(process.env.MONGO_URI);
@@ -25,19 +26,16 @@ const connectDB = async () => {
     process.exit(1);
   }
 };
-
 connectDB();
 
-// ✅ Route registration (MUST come *after* app is defined)
+// Routes
+app.get("/", (req, res) => {
+  res.send("StarlyClub Backend Server Running...");
+});
+
 app.use("/api/providers", providerRoutes);
 app.use("/api/offers", offerRoutes);
 app.use("/api/university", universityAuthRoutes);
 app.use("/api/join-request", joinRequestRoutes);
 
-// ✅ Root endpoint
-app.get("/", (req, res) => {
-  res.send("🚀 StarlyClub Backend Server Running...");
-});
-
-// ✅ Start server
 app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
