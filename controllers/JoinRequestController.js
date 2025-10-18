@@ -1,20 +1,21 @@
 import JoinRequest from "../models/JoinRequest.js";
 
-// ➕ Store new join request
-export const createJoinRequest = async (req, res) => {
+// 📩 Save new merchant join request
+export const submitJoinRequest = async (req, res) => {
   try {
-    const newRequest = await JoinRequest.create(req.body);
-    res.status(201).json({ success: true, data: newRequest });
+    const newRequest = new JoinRequest(req.body);
+    await newRequest.save();
+    res.status(201).json({ success: true, message: "Join request submitted successfully" });
   } catch (err) {
-    res.status(400).json({ success: false, message: err.message });
+    res.status(500).json({ success: false, message: err.message });
   }
 };
 
-// 📋 Fetch all requests
+// 📋 Fetch all join requests
 export const getJoinRequests = async (req, res) => {
   try {
-    const requests = await JoinRequest.find().sort({ submittedAt: -1 });
-    res.json({ success: true, data: requests });
+    const requests = await JoinRequest.find().sort({ createdAt: -1 });
+    res.json({ success: true, requests });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
