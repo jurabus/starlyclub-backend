@@ -1,36 +1,42 @@
+// controllers/uploadController.js
+import bucket from "../firebase.js";
 import multer from "multer";
 import path from "path";
-import fs from "fs";
+import { v4 as uuidv4 } from "uuid";
 
-// Ensure uploads directory exists
-const uploadDir = "uploads";
-if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir);
+const storage = multer.memoryStorage();
+const upload = multer({ storage }).single("image");
 
-// Storage configuration
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, uploadDir);
-  },
-  filename: function (req, file, cb) {
-    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-    cb(null, uniqueSuffix + path.extname(file.originalname));
-  },
-});
-
-const upload = multer({ storage });
-
-// === CONTROLLER ===
+// === Upload file to Firebase Storage ===
 export const uploadImage = (req, res) => {
-  try {
-    if (!req.file)
-      return res.status(400).json({ success: false, message: "No file uploaded" });
+  upload(req, res, async (err) => {
+    if (err) return res.status(400).json({ success: false, message: err.message });
+    if (!req.file) return res.status(400).json({ success: false, message: "No file uploaded" });
 
-    const imageUrl = `${req.protocol}://${req.get("host")}/uploads/${req.file.filename}`;
-    res.json({ success: true, url: imageUrl });
-  } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
-  }
+    try {
+      const file = req.file;
+      const fileName = `${uuidv4()}-${Date.now()}${path.extname(file.originalname)}`;
+      const blob = bucket.file(fileName);
+      const blobStream = blob.createWriteStream({
+        metadata: { contentType: file.mimetype },
+      });
+
+      blobStream.on("error", (error) => {
+        console.error("❌ Upload error:", error);
+        res.status(500).json({ success: false, message: error.message });
+      });
+
+      blobStream.on("finish", async () => {
+        // ✅ Make file public
+        await blob.makePublic();
+        const publicUrl = `https://storage.googleapis.com/${bucket.name}/${fileName}`;
+        res.status(200).json({ success: true, url: publicUrl });
+      });
+
+      blobStream.end(file.buffer);
+    } catch (error) {
+      console.error("🔥 Upload failed:", error);
+      res.status(500).json({ success: false, message: error.message });
+    }
+  });
 };
-
-// export multer middleware
-export { upload };
