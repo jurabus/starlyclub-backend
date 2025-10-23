@@ -4,7 +4,7 @@ import {
   addProvider,
   updateProvider,
   deleteProvider,
-  uploadProviderImage,
+  
 } from "../controllers/providerController.js";
 
 const router = express.Router();
@@ -16,7 +16,7 @@ router.get("/", getProviders);
 router.post("/" , addProvider);  
 
 // PUT update provider (supports file upload)
-router.put("/:id", uploadProviderImage, updateProvider);
+router.put("/:id", updateProvider);
 
 // DELETE provider
 router.delete("/:id", deleteProvider);

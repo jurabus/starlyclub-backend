@@ -40,26 +40,40 @@ export const getFeaturedOffers = async (req, res) => {
 
 export const createOffer = async (req, res) => {
   try {
-    let imageUrl = req.body.imageUrl;
+    const { name, category, description, imageUrl, discountPercent, providerId } = req.body;
+
+    // Validate required fields
+    if (!name || !category || !providerId) {
+      return res.status(400).json({
+        success: false,
+        message: "Name, category, and providerId are required.",
+      });
+    }
+
+    // Prefer uploaded file if available
+    let finalImageUrl = imageUrl;
     if (req.file) {
-      imageUrl = `${req.protocol}://${req.get("host")}/uploads/${req.file.filename}`;
+      finalImageUrl = `${req.protocol}://${req.get("host")}/uploads/${req.file.filename}`;
     }
 
     const offer = new Offer({
-      name: req.body.name,
-      category: req.body.category,
-      description: req.body.description,
-      imageUrl,
-      discountPercent: req.body.discountPercent,
-      providerId: req.body.providerId,
+      name,
+      category,
+      description,
+      imageUrl: finalImageUrl || null,
+      discountPercent: discountPercent || 0,
+      providerId,
     });
 
     await offer.save();
+
     res.status(201).json({ success: true, offer });
   } catch (err) {
+    console.error("❌ Offer creation failed:", err);
     res.status(400).json({ success: false, message: err.message });
   }
 };
+
 
 export const updateOffer = async (req, res) => {
   try {
