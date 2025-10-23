@@ -12,8 +12,8 @@ const router = express.Router();
 // GET all providers
 router.get("/", getProviders);
 
-// POST new provider (supports file upload)
-router.post("/", uploadProviderImage, addProvider);
+// POST new provider (supports file upload) router.post("/", uploadProviderImage, addProvider);
+router.post("/" , addProvider);  
 
 // PUT update provider (supports file upload)
 router.put("/:id", uploadProviderImage, updateProvider);
