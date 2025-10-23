@@ -22,21 +22,45 @@ export const uploadOfferImage = multer({ storage }).single("image");
 // === 2️⃣ CRUD OPERATIONS ===
 export const getOffers = async (req, res) => {
   try {
-    const offers = await Offer.find().populate("providerId").sort({ createdAt: -1 });
-    res.json({ success: true, offers });
+    const offers = await Offer.find()
+      .populate("providerId")
+      .sort({ createdAt: -1 });
+
+    // ✅ Ensure each offer has a full, valid image URL
+    const updated = offers.map((o) => ({
+      ...o._doc,
+      imageUrl: o.imageUrl?.startsWith("http")
+        ? o.imageUrl
+        : o.imageUrl
+        ? `https://starlyclub-backend.onrender.com/uploads/${o.imageUrl}`
+        : "https://firebasestorage.googleapis.com/v0/b/starleyclub.firebasestorage.app/o/offer.png?alt=media&token=aa78ae95-7815-425a-8b57-b72fbdaf8646",
+    }));
+
+    res.json({ success: true, offers: updated });
+  } catch (err) {
+    console.error("❌ getOffers error:", err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+
+export const getFeaturedOffers = async (req, res) => {
+  try {
+    const offers = await Offer.find().limit(10).populate("providerId");
+
+    const updated = offers.map((o) => ({
+      ...o._doc,
+      imageUrl: o.imageUrl?.startsWith("http")
+        ? o.imageUrl
+        : `https://starlyclub-backend.onrender.com/uploads/${o.imageUrl}`,
+    }));
+
+    res.json({ success: true, offers: updated });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
 };
 
-export const getFeaturedOffers = async (req, res) => {
-  try {
-    const offers = await Offer.find().limit(10).populate("providerId");
-    res.json({ success: true, offers });
-  } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
-  }
-};
 // ✅ Get offers for a specific provider
 export const getOffersByProvider = async (req, res) => {
   try {
@@ -48,7 +72,17 @@ export const getOffersByProvider = async (req, res) => {
 
     const offers = await Offer.find({ providerId }).populate("providerId").sort({ createdAt: -1 });
 
-    res.json({ success: true, offers });
+    const updated = offers.map((o) => ({
+  ...o._doc,
+  imageUrl: o.imageUrl?.startsWith("http")
+    ? o.imageUrl
+    : o.imageUrl
+    ? `https://starlyclub-backend.onrender.com/uploads/${o.imageUrl}`
+    : "https://firebasestorage.googleapis.com/v0/b/starleyclub.firebasestorage.app/o/offer.png?alt=media&token=aa78ae95-7815-425a-8b57-b72fbdaf8646",
+}));
+
+res.json({ success: true, offers: updated });
+
   } catch (err) {
     console.error("❌ Error in getOffersByProvider:", err);
     res.status(500).json({ success: false, message: err.message });
