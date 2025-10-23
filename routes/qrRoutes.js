@@ -41,6 +41,7 @@ router.post("/issue/:offerId", async (req, res) => {
  * 🔹 Validate a QR code
  * GET /api/qr/validate/:code
  */
+// 🔹 Validate a QR code
 router.get("/validate/:code", async (req, res) => {
   try {
     const { code } = req.params;
@@ -49,17 +50,17 @@ router.get("/validate/:code", async (req, res) => {
     if (!offer)
       return res.status(404).json({ success: false, message: "❌ Invalid QR code." });
 
-    // Check expiration
+    // ⏰ Expired
     if (offer.qrExpiresAt && new Date() > offer.qrExpiresAt) {
       return res.status(410).json({ success: false, message: "⏰ QR code expired." });
     }
 
-    // Check if already redeemed
+    // 🚫 Already redeemed
     if (offer.isRedeemed) {
       return res.status(409).json({ success: false, message: "🚫 Offer already redeemed." });
     }
 
-    // Mark as redeemed immediately
+    // ✅ Mark as redeemed
     offer.isRedeemed = true;
     await offer.save();
 
@@ -69,15 +70,21 @@ router.get("/validate/:code", async (req, res) => {
       offer: {
         id: offer._id,
         name: offer.name,
-        provider: offer.providerId?.name,
-        discount: offer.discountPercent,
+        category: offer.category,
         description: offer.description,
-        imageUrl: offer.imageUrl
+        imageUrl: offer.imageUrl,
+        discountPercent: offer.discountPercent,
+        providerId: {
+          id: offer.providerId?._id,
+          name: offer.providerId?.name,
+          logoUrl: offer.providerId?.logoUrl,
+        }
       }
     });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
 });
+
 
 export default router;
