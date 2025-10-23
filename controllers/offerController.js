@@ -37,6 +37,24 @@ export const getFeaturedOffers = async (req, res) => {
     res.status(500).json({ success: false, message: err.message });
   }
 };
+// ✅ Get offers for a specific provider
+export const getOffersByProvider = async (req, res) => {
+  try {
+    const providerId = req.params.providerId;
+
+    if (!providerId) {
+      return res.status(400).json({ success: false, message: "Provider ID missing" });
+    }
+
+    const offers = await Offer.find({ providerId }).populate("providerId").sort({ createdAt: -1 });
+
+    res.json({ success: true, offers });
+  } catch (err) {
+    console.error("❌ Error in getOffersByProvider:", err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
 
 export const createOffer = async (req, res) => {
   try {

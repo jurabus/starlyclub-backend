@@ -5,11 +5,13 @@ import {
   getFeaturedOffers,
   updateOffer,
   deleteOffer,
+  getOffersByProvider 
   
 } from "../controllers/offerController.js";
 
 const router = express.Router();
 
+router.get("/provider/:providerId", getOffersByProvider); 
 // GET
 router.get("/", getOffers);
 router.get("/featured/list", getFeaturedOffers);
