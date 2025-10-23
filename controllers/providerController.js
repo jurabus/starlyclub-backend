@@ -19,12 +19,29 @@ const storage = multer.diskStorage({
 
 export const uploadProviderImage = multer({ storage }).single("logo");
 
-// === 2️⃣ CRUD OPERATIONS ===
+// === 2️⃣ Helper to normalize logo URLs ===
+const normalizeLogoUrl = (url) => {
+  if (!url) {
+    // fallback demo logo
+    return "https://firebasestorage.googleapis.com/v0/b/starleyclub.firebasestorage.app/o/provider.png?alt=media&token=49a7169f-c8fb-4393-a2ad-50d49a5176ca";
+  }
+  if (url.startsWith("http")) return url;
+  return `https://starlyclub-backend.onrender.com/uploads/${url}`;
+};
+
+// === 3️⃣ CRUD OPERATIONS ===
 export const getProviders = async (req, res) => {
   try {
     const providers = await Provider.find().sort({ createdAt: -1 });
-    res.json({ success: true, providers });
+
+    const updated = providers.map((p) => ({
+      ...p._doc,
+      logoUrl: normalizeLogoUrl(p.logoUrl),
+    }));
+
+    res.json({ success: true, providers: updated });
   } catch (err) {
+    console.error("❌ getProviders error:", err);
     res.status(500).json({ success: false, message: err.message });
   }
 };
@@ -33,7 +50,7 @@ export const addProvider = async (req, res) => {
   try {
     let logoUrl = req.body.logoUrl;
 
-    // if file uploaded, override logoUrl with server path
+    // ✅ Use uploaded file if present
     if (req.file) {
       logoUrl = `${req.protocol}://${req.get("host")}/uploads/${req.file.filename}`;
     }
@@ -41,13 +58,14 @@ export const addProvider = async (req, res) => {
     const provider = new Provider({
       name: req.body.name,
       category: req.body.category,
-      logoUrl,
+      logoUrl: normalizeLogoUrl(logoUrl),
       description: req.body.description,
     });
 
     await provider.save();
     res.status(201).json({ success: true, provider });
   } catch (err) {
+    console.error("❌ addProvider error:", err);
     res.status(400).json({ success: false, message: err.message });
   }
 };
@@ -60,12 +78,17 @@ export const updateProvider = async (req, res) => {
       updateData.logoUrl = `${req.protocol}://${req.get("host")}/uploads/${req.file.filename}`;
     }
 
+    if (updateData.logoUrl) {
+      updateData.logoUrl = normalizeLogoUrl(updateData.logoUrl);
+    }
+
     const provider = await Provider.findByIdAndUpdate(req.params.id, updateData, {
       new: true,
     });
 
     res.json({ success: true, provider });
   } catch (err) {
+    console.error("❌ updateProvider error:", err);
     res.status(400).json({ success: false, message: err.message });
   }
 };
@@ -75,6 +98,7 @@ export const deleteProvider = async (req, res) => {
     await Provider.findByIdAndDelete(req.params.id);
     res.json({ success: true, message: "Provider deleted" });
   } catch (err) {
+    console.error("❌ deleteProvider error:", err);
     res.status(400).json({ success: false, message: err.message });
   }
 };
