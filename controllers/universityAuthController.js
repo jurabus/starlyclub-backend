@@ -55,13 +55,14 @@ export const verifyEmailToken = async (req, res) => {
 
 export const completeProfile = async (req, res) => {
   try {
-    const { email, password, name, age, phone, university } = req.body;
+    const { email, password, name, age, phone, university, referralCode } = req.body;
     if (!email || !password || !name)
       return res.status(400).json({ success: false, message: "Missing required fields" });
 
     const user = await Customer.findOne({ email });
     if (!user) return res.status(404).json({ success: false, message: "User not found" });
 
+    // Hash password
     const hashed = await bcrypt.hash(password, 10);
     user.password = hashed;
     user.name = name;
@@ -69,11 +70,39 @@ export const completeProfile = async (req, res) => {
     user.phone = phone;
     user.university = university;
     user.isVerified = true;
+
+    // ✅ Auto-generate unique referral code if not present
+    if (!user.referralCode) {
+      user.referralCode = "STARLY" + Math.random().toString(36).substring(2, 8).toUpperCase();
+    }
+
+    // ✅ Initialize wallet if not existing
+    if (typeof user.walletBalance === "undefined") user.walletBalance = 0;
+    if (typeof user.referralEarnings === "undefined") user.referralEarnings = 0;
+
+    // ✅ If a referral code was provided, link the new user to referrer
+    if (referralCode && referralCode.trim() !== "") {
+      const referrer = await Customer.findOne({ referralCode: referralCode.trim() });
+      if (referrer && !user.referredBy) {
+        user.referredBy = referrer._id;
+      }
+    }
+
     await user.save();
 
-    res.status(200).json({ success: true, message: "Profile created successfully", user });
+    res.status(200).json({
+      success: true,
+      message: "Profile created successfully",
+      user: {
+        email: user.email,
+        name: user.name,
+        referralCode: user.referralCode,
+        referredBy: user.referredBy,
+      },
+    });
   } catch (err) {
     console.error("Complete profile error:", err);
     res.status(500).json({ success: false, message: "Internal server error" });
   }
 };
+
