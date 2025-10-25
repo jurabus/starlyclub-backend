@@ -36,7 +36,7 @@ connectDB();
 app.get("/", (req, res) => {
   res.send("🚀 StarlyClub Backend Server Running...");
 });
-
+app.enable("trust proxy")
 // API routes
 app.use("/api/providers", providerRoutes);
 app.use("/api/offers", offerRoutes);
