@@ -12,6 +12,8 @@ import seedRoutes from "./routes/seedRoutes.js";
 import referralRoutes from "./routes/referralRoutes.js";
 import walletRoutes from "./routes/walletRoutes.js";
 import customerRoutes from "./routes/customerRoutes.js";
+import productRoutes from "./routes/productRoutes.js";
+
 
 
 
@@ -36,6 +38,8 @@ const connectDB = async () => {
 connectDB();
 
 // ====== ROUTES ======
+
+
 app.get("/", (req, res) => {
   res.send("🚀 StarlyClub Backend Server Running...");
 });
@@ -44,7 +48,7 @@ app.enable("trust proxy")
 app.use("/api/referral", referralRoutes);
 app.use("/api/wallet", walletRoutes);
 app.use("/api/customer", customerRoutes);
-
+app.use("/api/products", productRoutes);
 app.use("/api/providers", providerRoutes);
 app.use("/api/offers", offerRoutes);
 app.use("/api/university", universityAuthRoutes);
