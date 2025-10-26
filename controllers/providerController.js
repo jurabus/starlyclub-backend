@@ -102,3 +102,34 @@ export const deleteProvider = async (req, res) => {
     res.status(400).json({ success: false, message: err.message });
   }
 };
+
+// 🟢 Get a single provider by ID
+export const getProviderById = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Fetch by ID or by name (fallback for string identifiers)
+    let provider = await Provider.findById(id);
+    if (!provider) {
+      provider = await Provider.findOne({ name: id });
+    }
+
+    if (!provider) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Provider not found" });
+    }
+
+    const normalized = {
+      ...provider._doc,
+      logoUrl: provider.logoUrl?.startsWith("http")
+        ? provider.logoUrl
+        : `https://starlyclub-backend.onrender.com/uploads/${provider.logoUrl}`,
+    };
+
+    res.json({ success: true, provider: normalized });
+  } catch (err) {
+    console.error("❌ getProviderById error:", err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};

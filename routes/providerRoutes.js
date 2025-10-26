@@ -4,11 +4,13 @@ import {
   addProvider,
   updateProvider,
   deleteProvider,
+  getProviderById,
   
 } from "../controllers/providerController.js";
 
 const router = express.Router();
-
+// GET provider by ID
+router.get("/:id", getProviderById);
 // GET all providers
 router.get("/", getProviders);
 
