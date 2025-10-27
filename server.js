@@ -13,6 +13,17 @@ import referralRoutes from "./routes/referralRoutes.js";
 import walletRoutes from "./routes/walletRoutes.js";
 import customerRoutes from "./routes/customerRoutes.js";
 import productRoutes from "./routes/productRoutes.js";
+import cartRoutes from "./routes/cartRoutes.js";
+import orderRoutes from "./routes/orderRoutes.js";
+import providerAuthRoutes from "./routes/providerAuthRoutes.js";
+import voucherRoutes from "./routes/voucherRoutes.js";
+
+
+
+
+
+
+
 
 
 
@@ -45,6 +56,10 @@ app.get("/", (req, res) => {
 });
 app.enable("trust proxy")
 // API routes
+app.use("/api/vouchers", voucherRoutes);
+app.use("/api/providers", providerAuthRoutes);
+app.use("/api/orders", orderRoutes);
+app.use("/api/cart", cartRoutes);
 app.use("/api/referral", referralRoutes);
 app.use("/api/wallet", walletRoutes);
 app.use("/api/customer", customerRoutes);

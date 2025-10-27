@@ -1,7 +1,0 @@
-git status
-git add .
-Or, to add only the specific file:
-
-git add routes/providerRoutes.js
-git commit -m "Temporarily remove uploadProviderImage from provider POST route for demo"
-git push origin main

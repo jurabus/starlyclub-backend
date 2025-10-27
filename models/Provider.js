@@ -8,6 +8,8 @@ const providerSchema = new mongoose.Schema({
   rating: { type: Number, default: 0 },
   featured: { type: Boolean, default: false },
   createdAt: { type: Date, default: Date.now },
+  username: { type: String, unique: true, required: true },
+  accessKey: { type: String, required: true },
 });
 
 export default mongoose.model("Provider", providerSchema);

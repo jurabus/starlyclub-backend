@@ -3,12 +3,14 @@ import {
   sendVerificationEmail,
   verifyEmailToken,
   completeProfile,
+  login,
 } from "../controllers/universityAuthController.js";
 
 const router = express.Router();
 
-router.post("/verify-email", sendVerificationEmail); // Step 1
-router.get("/verify-token", verifyEmailToken);       // Step 2
-router.post("/complete-profile", completeProfile);   // Step 3
+router.post("/verify-email", sendVerificationEmail); 
+router.get("/verify-token", verifyEmailToken);       
+router.post("/complete-profile", completeProfile);
+router.post("/login", login);   
 
 export default router;
