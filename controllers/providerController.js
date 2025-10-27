@@ -46,6 +46,7 @@ export const getProviders = async (req, res) => {
   }
 };
 
+// === In providerController.js ===
 export const addProvider = async (req, res) => {
   try {
     let logoUrl = req.body.logoUrl;
@@ -63,7 +64,22 @@ export const addProvider = async (req, res) => {
     });
 
     await provider.save();
-    res.status(201).json({ success: true, provider });
+
+    // ✅ Return updated provider list to sync with Flutter
+    const providers = await Provider.find().sort({ createdAt: -1 });
+
+    const updated = providers.map((p) => ({
+      ...p._doc,
+      logoUrl: normalizeLogoUrl(p.logoUrl),
+    }));
+	res.setHeader("Access-Control-Allow-Origin", "*");
+
+
+    res.status(201).json({
+      success: true,
+      provider,
+      providers: updated, // 👈 Flutter uses this
+    });
   } catch (err) {
     console.error("❌ addProvider error:", err);
     res.status(400).json({ success: false, message: err.message });
