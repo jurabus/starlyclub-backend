@@ -3,6 +3,7 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import Offer from "../models/Offer.js";
+import Voucher from "../models/Voucher.js";
 // === 1️⃣ Configure local uploads ===
 const uploadDir = "uploads";
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir);
@@ -51,34 +52,39 @@ export const addProvider = async (req, res) => {
   try {
     let logoUrl = req.body.logoUrl;
 
-    // ✅ Use uploaded file if present
+    // ✅ fallback for file upload
     if (req.file) {
       logoUrl = `${req.protocol}://${req.get("host")}/uploads/${req.file.filename}`;
     }
 
+    // ✅ ensure required demo fields exist
+    req.body.username = req.body.username || `demo_${Date.now()}`;
+    req.body.accessKey = req.body.accessKey || `${Date.now()}`;
+
+    // ✅ now create provider using full req.body
     const provider = new Provider({
       name: req.body.name,
       category: req.body.category,
       logoUrl: normalizeLogoUrl(logoUrl),
       description: req.body.description,
+      username: req.body.username,
+      accessKey: req.body.accessKey,
     });
 
     await provider.save();
 
-    // ✅ Return updated provider list to sync with Flutter
+    // ✅ Return updated list
     const providers = await Provider.find().sort({ createdAt: -1 });
-
     const updated = providers.map((p) => ({
       ...p._doc,
       logoUrl: normalizeLogoUrl(p.logoUrl),
     }));
-	res.setHeader("Access-Control-Allow-Origin", "*");
 
-
+    res.setHeader("Access-Control-Allow-Origin", "*");
     res.status(201).json({
       success: true,
       provider,
-      providers: updated, // 👈 Flutter uses this
+      providers: updated,
     });
   } catch (err) {
     console.error("❌ addProvider error:", err);
@@ -86,43 +92,77 @@ export const addProvider = async (req, res) => {
   }
 };
 
+
 export const updateProvider = async (req, res) => {
   try {
     let updateData = { ...req.body };
 
+    // ✅ If a new logo file is uploaded, use it
     if (req.file) {
       updateData.logoUrl = `${req.protocol}://${req.get("host")}/uploads/${req.file.filename}`;
     }
 
+    // ✅ Normalize URL if needed
     if (updateData.logoUrl) {
       updateData.logoUrl = normalizeLogoUrl(updateData.logoUrl);
     }
 
-    const provider = await Provider.findByIdAndUpdate(req.params.id, updateData, {
-      new: true,
-    });
+    // ✅ Get existing provider first to preserve sensitive fields
+    const existingProvider = await Provider.findById(req.params.id);
+    if (!existingProvider) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Provider not found" });
+    }
 
-    res.json({ success: true, provider });
+    // ✅ Preserve required fields if not provided in body
+    updateData.username = updateData.username || existingProvider.username;
+    updateData.accessKey = updateData.accessKey || existingProvider.accessKey;
+
+    // ✅ Update safely
+    const updatedProvider = await Provider.findByIdAndUpdate(
+      req.params.id,
+      updateData,
+      { new: true }
+    );
+
+    res.json({ success: true, provider: updatedProvider });
   } catch (err) {
     console.error("❌ updateProvider error:", err);
     res.status(400).json({ success: false, message: err.message });
   }
 };
 
+
 export const deleteProvider = async (req, res) => {
   try {
     const provider = await Provider.findByIdAndDelete(req.params.id);
+
     if (!provider) {
-      return res.status(404).json({ success: false, message: "Provider not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Provider not found" });
     }
 
     // 🧹 Delete all offers linked to this provider
-    const result = await Offer.deleteMany({ providerId: provider._id });
+    const offersResult = await Offer.deleteMany({ providerId: provider._id });
+
+    // 🧹 Delete all vouchers linked to this provider
+    const vouchersResult = await Voucher.deleteMany({ provider: provider._id });
 
     res.json({
       success: true,
-      message: `Provider and ${result.deletedCount} associated offers deleted.`,
+      message: `Provider deleted successfully.`,
+      summary: {
+        providerId: provider._id,
+        offersDeleted: offersResult.deletedCount,
+        vouchersDeleted: vouchersResult.deletedCount,
+      },
     });
+
+    console.log(
+      `🗑️ Deleted provider ${provider.name}: ${offersResult.deletedCount} offers, ${vouchersResult.deletedCount} vouchers`
+    );
   } catch (err) {
     console.error("❌ deleteProvider error:", err);
     res.status(400).json({ success: false, message: err.message });
