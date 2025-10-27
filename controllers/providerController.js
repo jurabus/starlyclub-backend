@@ -2,7 +2,7 @@ import Provider from "../models/Provider.js";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
-
+import Offer from "../models/Offer.js";
 // === 1️⃣ Configure local uploads ===
 const uploadDir = "uploads";
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir);
@@ -111,8 +111,18 @@ export const updateProvider = async (req, res) => {
 
 export const deleteProvider = async (req, res) => {
   try {
-    await Provider.findByIdAndDelete(req.params.id);
-    res.json({ success: true, message: "Provider deleted" });
+    const provider = await Provider.findByIdAndDelete(req.params.id);
+    if (!provider) {
+      return res.status(404).json({ success: false, message: "Provider not found" });
+    }
+
+    // 🧹 Delete all offers linked to this provider
+    const result = await Offer.deleteMany({ providerId: provider._id });
+
+    res.json({
+      success: true,
+      message: `Provider and ${result.deletedCount} associated offers deleted.`,
+    });
   } catch (err) {
     console.error("❌ deleteProvider error:", err);
     res.status(400).json({ success: false, message: err.message });

@@ -18,16 +18,6 @@ import orderRoutes from "./routes/orderRoutes.js";
 import providerAuthRoutes from "./routes/providerAuthRoutes.js";
 import voucherRoutes from "./routes/voucherRoutes.js";
 
-
-
-
-
-
-
-
-
-
-
 dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -35,7 +25,7 @@ const PORT = process.env.PORT || 5000;
 // ====== MIDDLEWARES ======
 app.use(cors());
 app.use(express.json());
-
+app.use(express.urlencoded({ extended: true })); 
 // ====== MONGO CONNECTION ======
 const connectDB = async () => {
   try {
@@ -57,14 +47,14 @@ app.get("/", (req, res) => {
 app.enable("trust proxy")
 // API routes
 app.use("/api/vouchers", voucherRoutes);
-app.use("/api/providers", providerAuthRoutes);
+app.use("/api/providers", providerRoutes);
+app.use("/api/provider/auth", providerAuthRoutes);
 app.use("/api/orders", orderRoutes);
 app.use("/api/cart", cartRoutes);
 app.use("/api/referral", referralRoutes);
 app.use("/api/wallet", walletRoutes);
 app.use("/api/customer", customerRoutes);
 app.use("/api/products", productRoutes);
-app.use("/api/providers", providerRoutes);
 app.use("/api/offers", offerRoutes);
 app.use("/api/university", universityAuthRoutes);
 app.use("/api/join-request", joinRequestRoutes);
