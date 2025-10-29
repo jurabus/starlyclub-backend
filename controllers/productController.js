@@ -24,10 +24,16 @@ const normalizeImageUrl = (url) => {
 
 export const getProducts = async (req, res) => {
   try {
+    const { area, category, subcategory } = req.query;
     const limit = parseInt(req.query.limit) || 20;
     const skip = parseInt(req.query.skip) || 0;
 
-    const products = await Product.find()
+    const filter = {};
+    if (area) filter.area = new RegExp(area, "i");
+    if (category) filter.category = new RegExp(category, "i");
+    if (subcategory) filter.subcategory = new RegExp(subcategory, "i");
+
+    const products = await Product.find(filter)
       .populate("providerId")
       .sort({ createdAt: -1 })
       .skip(skip)
@@ -46,6 +52,7 @@ export const getProducts = async (req, res) => {
     res.status(500).json({ success: false, message: err.message });
   }
 };
+
 
 export const getProductsByProvider = async (req, res) => {
   try {

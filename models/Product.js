@@ -5,6 +5,9 @@ const productSchema = new mongoose.Schema({
   imageUrl: { type: String, required: true },
   oldPrice: { type: Number, required: true },
   newPrice: { type: Number, required: true },
+  category: { type: String, default: "" },      // 🔹 Added
+  subcategory: { type: String, default: "" },   // 🔹 Added
+  area: { type: String, default: "Cairo" },  
   providerId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Provider",

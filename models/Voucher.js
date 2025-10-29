@@ -24,6 +24,9 @@ const voucherSchema = new mongoose.Schema(
 
     // Optional: human name; if empty we’ll compute on the fly in controller
     name: { type: String, trim: true, default: "" },
+	category: { type: String, default: "" },
+    subcategory: { type: String, default: "" },
+    area: { type: String, default: "Cairo" },
   },
   { timestamps: true }
 );

@@ -5,6 +5,8 @@ const providerSchema = new mongoose.Schema({
   logoUrl: String,
   description: String,
   category: String,
+  subcategory: { type: String, default: "" },  // 🔹 Added
+  area: { type: String, default: "Cairo" }, 
   rating: { type: Number, default: 0 },
   featured: { type: Boolean, default: false },
   createdAt: { type: Date, default: Date.now },

@@ -4,6 +4,8 @@ const offerSchema = new mongoose.Schema(
   {
     name: String,
     category: String,
+	subcategory: { type: String, default: "" },  // 🔹 Added
+    area: { type: String, default: "Cairo" }, 
     description: String,
     imageUrl: String,
     discountPercent: Number,

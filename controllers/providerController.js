@@ -33,105 +33,68 @@ const normalizeLogoUrl = (url) => {
 // === 3️⃣ CRUD OPERATIONS ===
 export const getProviders = async (req, res) => {
   try {
-    const providers = await Provider.find().sort({ createdAt: -1 });
+    const { area, category, subcategory } = req.query;
+    const filter = {};
+
+    if (area) filter.area = new RegExp(area, "i");
+    if (category) filter.category = new RegExp(category, "i");
+    if (subcategory) filter.subcategory = new RegExp(subcategory, "i");
+
+    const providers = await Provider.find(filter).sort({ createdAt: -1 });
 
     const updated = providers.map((p) => ({
       ...p._doc,
-      logoUrl: normalizeLogoUrl(p.logoUrl),
+      logoUrl: p.logoUrl?.startsWith("http")
+        ? p.logoUrl
+        : `https://starlyclub-backend.onrender.com/uploads/${p.logoUrl}`,
     }));
 
     res.json({ success: true, providers: updated });
   } catch (err) {
-    console.error("❌ getProviders error:", err);
     res.status(500).json({ success: false, message: err.message });
   }
 };
 
-// === In providerController.js ===
-export const addProvider = async (req, res) => {
+
+export const createProvider = async (req, res) => {
   try {
-    let logoUrl = req.body.logoUrl;
-
-    // ✅ fallback for file upload
-    if (req.file) {
-      logoUrl = `${req.protocol}://${req.get("host")}/uploads/${req.file.filename}`;
-    }
-
-    // ✅ ensure required demo fields exist
-    req.body.username = req.body.username || `demo_${Date.now()}`;
-    req.body.accessKey = req.body.accessKey || `${Date.now()}`;
-
-    // ✅ now create provider using full req.body
     const provider = new Provider({
       name: req.body.name,
-      category: req.body.category,
-      logoUrl: normalizeLogoUrl(logoUrl),
-      description: req.body.description,
+      category: req.body.category || "",
+      subcategory: req.body.subcategory || "",
+      area: req.body.area || "Cairo",
+      description: req.body.description || "",
+      logoUrl: req.body.logoUrl || "",
       username: req.body.username,
       accessKey: req.body.accessKey,
+      featured: req.body.featured || false,
     });
 
     await provider.save();
-
-    // ✅ Return updated list
-    const providers = await Provider.find().sort({ createdAt: -1 });
-    const updated = providers.map((p) => ({
-      ...p._doc,
-      logoUrl: normalizeLogoUrl(p.logoUrl),
-    }));
-
-    res.setHeader("Access-Control-Allow-Origin", "*");
-    res.status(201).json({
-      success: true,
-      provider,
-      providers: updated,
-    });
+    res.status(201).json({ success: true, provider });
   } catch (err) {
-    console.error("❌ addProvider error:", err);
     res.status(400).json({ success: false, message: err.message });
   }
 };
-
 
 export const updateProvider = async (req, res) => {
   try {
-    let updateData = { ...req.body };
-
-    // ✅ If a new logo file is uploaded, use it
-    if (req.file) {
-      updateData.logoUrl = `${req.protocol}://${req.get("host")}/uploads/${req.file.filename}`;
-    }
-
-    // ✅ Normalize URL if needed
-    if (updateData.logoUrl) {
-      updateData.logoUrl = normalizeLogoUrl(updateData.logoUrl);
-    }
-
-    // ✅ Get existing provider first to preserve sensitive fields
-    const existingProvider = await Provider.findById(req.params.id);
-    if (!existingProvider) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Provider not found" });
-    }
-
-    // ✅ Preserve required fields if not provided in body
-    updateData.username = updateData.username || existingProvider.username;
-    updateData.accessKey = updateData.accessKey || existingProvider.accessKey;
-
-    // ✅ Update safely
-    const updatedProvider = await Provider.findByIdAndUpdate(
-      req.params.id,
-      updateData,
-      { new: true }
-    );
-
-    res.json({ success: true, provider: updatedProvider });
+    const update = {
+      name: req.body.name,
+      category: req.body.category,
+      subcategory: req.body.subcategory || "",
+      area: req.body.area || "Cairo",
+      description: req.body.description,
+      logoUrl: req.body.logoUrl,
+      featured: req.body.featured,
+    };
+    const provider = await Provider.findByIdAndUpdate(req.params.id, update, { new: true });
+    res.json({ success: true, provider });
   } catch (err) {
-    console.error("❌ updateProvider error:", err);
     res.status(400).json({ success: false, message: err.message });
   }
 };
+
 
 
 export const deleteProvider = async (req, res) => {
