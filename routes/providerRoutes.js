@@ -15,7 +15,7 @@ router.get("/:id", getProviderById);
 router.get("/", getProviders);
 
 // POST new provider (supports file upload) router.post("/", uploadProviderImage, addProvider);
-router.post("/" , addProvider);  
+router.post("/" , createProvider);  
 
 // PUT update provider (supports file upload)
 router.put("/:id", updateProvider);
