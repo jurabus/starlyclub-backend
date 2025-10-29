@@ -1,7 +1,7 @@
 import express from "express";
 import {
   getProviders,
-  addProvider,
+  createProvider,
   updateProvider,
   deleteProvider,
   getProviderById,
