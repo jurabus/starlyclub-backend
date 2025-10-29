@@ -34,11 +34,13 @@ export const createVoucher = async (req, res) => {
 export const listVouchers = async (req, res) => {
   try {
     const { q, providerId, featured, active } = req.query;
+    const limit = parseInt(req.query.limit) || 20;
+    const skip = parseInt(req.query.skip) || 0;
+
     const filter = {};
     if (providerId) filter.provider = providerId;
     if (featured !== undefined) filter.featured = featured === "true";
     if (active !== undefined) filter.isActive = active === "true";
-
     if (q) {
       filter.$or = [
         { name: new RegExp(q, "i") },
@@ -46,12 +48,17 @@ export const listVouchers = async (req, res) => {
       ];
     }
 
-    const vouchers = await Voucher.find(filter).sort({ createdAt: -1 }).limit(100);
+    const vouchers = await Voucher.find(filter)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit);
+
     res.json({ vouchers });
   } catch (e) {
     res.status(500).json({ message: "Failed to list vouchers", error: e.message });
   }
 };
+
 
 export const getVoucher = async (req, res) => {
   try {

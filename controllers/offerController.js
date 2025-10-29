@@ -23,9 +23,14 @@ export const uploadOfferImage = multer({ storage }).single("image");
 // === 2️⃣ CRUD OPERATIONS ===
 export const getOffers = async (req, res) => {
   try {
+    const limit = parseInt(req.query.limit) || 20;
+    const skip = parseInt(req.query.skip) || 0;
+
     const offers = await Offer.find()
       .populate("providerId")
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit);
 
     const updated = offers.map((o) => ({
       ...o._doc,
@@ -42,6 +47,7 @@ export const getOffers = async (req, res) => {
     res.status(500).json({ success: false, message: err.message });
   }
 };
+
 
 export const getFeaturedOffers = async (req, res) => {
   try {

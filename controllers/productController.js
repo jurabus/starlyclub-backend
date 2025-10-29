@@ -24,12 +24,22 @@ const normalizeImageUrl = (url) => {
 
 export const getProducts = async (req, res) => {
   try {
-    const products = await Product.find().populate("providerId");
+    const limit = parseInt(req.query.limit) || 20;
+    const skip = parseInt(req.query.skip) || 0;
+
+    const products = await Product.find()
+      .populate("providerId")
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit);
+
     res.json({
       success: true,
       products: products.map((p) => ({
         ...p._doc,
-        imageUrl: normalizeImageUrl(p.imageUrl),
+        imageUrl: p.imageUrl?.startsWith("http")
+          ? p.imageUrl
+          : `https://starlyclub-backend.onrender.com/uploads/${p.imageUrl}`,
       })),
     });
   } catch (err) {
