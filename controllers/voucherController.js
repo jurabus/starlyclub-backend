@@ -1,16 +1,33 @@
-// controllers/voucherController.js
 import Voucher from "../models/Voucher.js";
 import Provider from "../models/Provider.js";
 
-const buildName = (providerName, faceValue, currency = "SR") =>
-  `${providerName} ${currency}${faceValue} voucher`;
-
+// ========== CREATE VOUCHER ==========
 export const createVoucher = async (req, res) => {
   try {
-    const { providerId, faceValue, price, currency, stock, logoUrl, featured, isActive } = req.body;
+    const {
+      providerId,
+      faceValue,
+      price,
+      stock,
+      currency,
+      featured,
+      isActive,
+      name,
+      category,
+      subcategory,
+      area,
+      logoUrl,
+    } = req.body;
 
     const provider = await Provider.findById(providerId);
-    if (!provider) return res.status(404).json({ message: "Provider not found" });
+    if (!provider) {
+      return res.status(404).json({ error: "Provider not found" });
+    }
+
+    // ✅ Auto-fill missing attributes for frontend filters
+    const voucherName =
+      name ||
+      `${provider.name} Voucher ${faceValue || ""} ${currency || "SR"}`.trim();
 
     const doc = await Voucher.create({
       provider: provider._id,
@@ -22,99 +39,125 @@ export const createVoucher = async (req, res) => {
       logoUrl: logoUrl || provider.logoUrl || "",
       featured: !!featured,
       isActive: isActive !== false,
-      name: buildName(provider.name, faceValue, currency || "SR"),
+      name: voucherName,
+      // 🔹 Ensure filterable fields always exist
+      category: category || provider.category || "General",
+      subcategory: subcategory || provider.subcategory || "",
+      area: area || provider.area || "Jeddah",
     });
 
-    res.status(201).json({ voucher: doc });
-  } catch (e) {
-    res.status(500).json({ message: "Failed to create voucher", error: e.message });
+    res.status(201).json({ success: true, voucher: doc });
+  } catch (err) {
+    console.error("❌ Create voucher error:", err);
+    res.status(500).json({ error: err.message });
   }
 };
 
+// ========== LIST VOUCHERS ==========
 export const listVouchers = async (req, res) => {
   try {
-    const { area, category, subcategory, q, providerId, featured, active } = req.query;
-    const limit = parseInt(req.query.limit) || 20;
-    const skip = parseInt(req.query.skip) || 0;
+    const { area, category, subcategory, featured, limit = 50, page = 1 } =
+      req.query;
 
     const filter = {};
-    if (area) filter.area = new RegExp(area, "i");
-    if (category) filter.category = new RegExp(category, "i");
-    if (subcategory) filter.subcategory = new RegExp(subcategory, "i");
-    if (providerId) filter.provider = providerId;
+
+    // ✅ Flexible filters — show vouchers even if some fields missing
+    if (area)
+      filter.$or = [
+        { area: new RegExp(area, "i") },
+        { area: { $exists: false } },
+      ];
+
+    if (category)
+      filter.$or = [
+        { category: new RegExp(category, "i") },
+        { category: { $exists: false } },
+      ];
+
+    if (subcategory)
+      filter.$or = [
+        { subcategory: new RegExp(subcategory, "i") },
+        { subcategory: { $exists: false } },
+      ];
+
     if (featured !== undefined) filter.featured = featured === "true";
-    if (active !== undefined) filter.isActive = active === "true";
-    if (q) filter.$or = [{ name: new RegExp(q, "i") }, { providerName: new RegExp(q, "i") }];
+    filter.isActive = true; // only show active vouchers
+
+    const skip = (parseInt(page) - 1) * parseInt(limit);
 
     const vouchers = await Voucher.find(filter)
       .sort({ createdAt: -1 })
       .skip(skip)
-      .limit(limit);
+      .limit(parseInt(limit))
+      .lean();
 
     res.json({ vouchers });
-  } catch (e) {
-    res.status(500).json({ message: "Failed to list vouchers", error: e.message });
+  } catch (err) {
+    console.error("❌ List vouchers error:", err);
+    res.status(500).json({ error: err.message });
   }
 };
 
-
-
+// ========== GET SINGLE VOUCHER ==========
 export const getVoucher = async (req, res) => {
   try {
     const voucher = await Voucher.findById(req.params.id);
-    if (!voucher) return res.status(404).json({ message: "Voucher not found" });
+    if (!voucher) {
+      return res.status(404).json({ error: "Voucher not found" });
+    }
     res.json({ voucher });
-  } catch (e) {
-    res.status(500).json({ message: "Failed to get voucher", error: e.message });
+  } catch (err) {
+    console.error("❌ Get voucher error:", err);
+    res.status(500).json({ error: err.message });
   }
 };
 
+// ========== UPDATE VOUCHER ==========
 export const updateVoucher = async (req, res) => {
   try {
-    const updates = { ...req.body };
-    if (updates.providerId) {
-      const p = await Provider.findById(updates.providerId);
-      if (!p) return res.status(404).json({ message: "Provider not found" });
-      updates.provider = p._id;
-      updates.providerName = p.name;
+    const updated = await Voucher.findByIdAndUpdate(
+      req.params.id,
+      req.body,
+      { new: true }
+    );
+    if (!updated) {
+      return res.status(404).json({ error: "Voucher not found" });
     }
-
-    // Rebuild name if pricing/provider changed
-    if ((updates.faceValue || updates.currency || updates.providerName) && !updates.name) {
-      const finalCurrency = updates.currency || "SR";
-      const finalFace = updates.faceValue;
-      const finalProviderName = updates.providerName;
-      if (finalProviderName && finalFace) {
-        updates.name = buildName(finalProviderName, finalFace, finalCurrency);
-      }
-    }
-
-    const voucher = await Voucher.findByIdAndUpdate(req.params.id, updates, { new: true });
-    if (!voucher) return res.status(404).json({ message: "Voucher not found" });
-    res.json({ voucher });
-  } catch (e) {
-    res.status(500).json({ message: "Failed to update voucher", error: e.message });
+    res.json({ success: true, voucher: updated });
+  } catch (err) {
+    console.error("❌ Update voucher error:", err);
+    res.status(500).json({ error: err.message });
   }
 };
 
+// ========== DELETE VOUCHER ==========
 export const deleteVoucher = async (req, res) => {
   try {
-    const voucher = await Voucher.findByIdAndDelete(req.params.id);
-    if (!voucher) return res.status(404).json({ message: "Voucher not found" });
-    res.json({ success: true });
-  } catch (e) {
-    res.status(500).json({ message: "Failed to delete voucher", error: e.message });
+    const deleted = await Voucher.findByIdAndDelete(req.params.id);
+    if (!deleted) {
+      return res.status(404).json({ error: "Voucher not found" });
+    }
+    res.json({ success: true, message: "Voucher deleted" });
+  } catch (err) {
+    console.error("❌ Delete voucher error:", err);
+    res.status(500).json({ error: err.message });
   }
 };
 
-// Featured shortcut
-export const featuredVouchers = async (_req, res) => {
+// ========== FEATURED VOUCHERS ==========
+export const featuredVouchers = async (req, res) => {
   try {
-    const vouchers = await Voucher.find({ featured: true, isActive: true })
+    const vouchers = await Voucher.find({
+      featured: true,
+      isActive: true,
+    })
       .sort({ createdAt: -1 })
-      .limit(20);
+      .limit(20)
+      .lean();
+
     res.json({ vouchers });
-  } catch (e) {
-    res.status(500).json({ message: "Failed to list featured vouchers", error: e.message });
+  } catch (err) {
+    console.error("❌ Featured vouchers error:", err);
+    res.status(500).json({ error: err.message });
   }
 };
