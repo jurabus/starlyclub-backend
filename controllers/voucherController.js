@@ -20,11 +20,8 @@ export const createVoucher = async (req, res) => {
     } = req.body;
 
     const provider = await Provider.findById(providerId);
-    if (!provider) {
-      return res.status(404).json({ error: "Provider not found" });
-    }
+    if (!provider) return res.status(404).json({ error: "Provider not found" });
 
-    // ✅ Auto-fill missing attributes for frontend filters
     const voucherName =
       name ||
       `${provider.name} Voucher ${faceValue || ""} ${currency || "SR"}`.trim();
@@ -40,7 +37,6 @@ export const createVoucher = async (req, res) => {
       featured: !!featured,
       isActive: isActive !== false,
       name: voucherName,
-      // 🔹 Ensure filterable fields always exist
       category: category || provider.category || "General",
       subcategory: subcategory || provider.subcategory || "",
       area: area || provider.area || "Jeddah",
@@ -53,35 +49,22 @@ export const createVoucher = async (req, res) => {
   }
 };
 
-// ========== LIST VOUCHERS ==========
+// ========== LIST ALL VOUCHERS ==========
 export const listVouchers = async (req, res) => {
   try {
     const { area, category, subcategory, featured, limit = 50, page = 1 } =
       req.query;
 
-    const filter = {};
+    const filter = { isActive: true };
 
-    // ✅ Flexible filters — show vouchers even if some fields missing
     if (area)
-      filter.$or = [
-        { area: new RegExp(area, "i") },
-        { area: { $exists: false } },
-      ];
-
+      filter.area = new RegExp(area, "i");
     if (category)
-      filter.$or = [
-        { category: new RegExp(category, "i") },
-        { category: { $exists: false } },
-      ];
-
+      filter.category = new RegExp(category, "i");
     if (subcategory)
-      filter.$or = [
-        { subcategory: new RegExp(subcategory, "i") },
-        { subcategory: { $exists: false } },
-      ];
-
-    if (featured !== undefined) filter.featured = featured === "true";
-    filter.isActive = true; // only show active vouchers
+      filter.subcategory = new RegExp(subcategory, "i");
+    if (featured !== undefined)
+      filter.featured = featured === "true";
 
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
@@ -98,13 +81,42 @@ export const listVouchers = async (req, res) => {
   }
 };
 
+// ========== VOUCHERS BY PROVIDER ==========
+export const providerVouchers = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { featured, area, limit = 50, page = 1 } = req.query;
+
+    const filter = {
+      provider: id,
+      isActive: true,
+    };
+
+    if (featured !== undefined)
+      filter.featured = featured === "true";
+    if (area)
+      filter.area = new RegExp(area, "i");
+
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    const vouchers = await Voucher.find(filter)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(parseInt(limit))
+      .lean();
+
+    res.json({ vouchers });
+  } catch (err) {
+    console.error("❌ Provider vouchers error:", err);
+    res.status(500).json({ error: err.message });
+  }
+};
+
 // ========== GET SINGLE VOUCHER ==========
 export const getVoucher = async (req, res) => {
   try {
     const voucher = await Voucher.findById(req.params.id);
-    if (!voucher) {
-      return res.status(404).json({ error: "Voucher not found" });
-    }
+    if (!voucher) return res.status(404).json({ error: "Voucher not found" });
     res.json({ voucher });
   } catch (err) {
     console.error("❌ Get voucher error:", err);
@@ -115,14 +127,10 @@ export const getVoucher = async (req, res) => {
 // ========== UPDATE VOUCHER ==========
 export const updateVoucher = async (req, res) => {
   try {
-    const updated = await Voucher.findByIdAndUpdate(
-      req.params.id,
-      req.body,
-      { new: true }
-    );
-    if (!updated) {
-      return res.status(404).json({ error: "Voucher not found" });
-    }
+    const updated = await Voucher.findByIdAndUpdate(req.params.id, req.body, {
+      new: true,
+    });
+    if (!updated) return res.status(404).json({ error: "Voucher not found" });
     res.json({ success: true, voucher: updated });
   } catch (err) {
     console.error("❌ Update voucher error:", err);
@@ -134,9 +142,7 @@ export const updateVoucher = async (req, res) => {
 export const deleteVoucher = async (req, res) => {
   try {
     const deleted = await Voucher.findByIdAndDelete(req.params.id);
-    if (!deleted) {
-      return res.status(404).json({ error: "Voucher not found" });
-    }
+    if (!deleted) return res.status(404).json({ error: "Voucher not found" });
     res.json({ success: true, message: "Voucher deleted" });
   } catch (err) {
     console.error("❌ Delete voucher error:", err);
