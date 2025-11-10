@@ -1,3 +1,4 @@
+// controllers/universityAuthController.js
 import Customer from "../models/Customer.js";
 import Cart from "../models/Cart.js";
 import AuthorizedDomain from "../models/AuthorizedDomain.js";
@@ -9,11 +10,11 @@ import { mergeCarts as mergeCartUtility } from "../controllers/cartController.js
 /* ============================================================
    🧠 Helper: Fetch authorized domains dynamically from DB
    ============================================================ */
-async function getAllowedDomains() {
+export async function getAllowedDomains() {
   try {
     const domains = await AuthorizedDomain.find({});
     if (!domains || domains.length === 0) {
-      console.warn("⚠️ No authorized domains found in DB — using fallback list");
+      console.warn("⚠️ No authorized domains found — using fallback list");
       return ["@harvard.edu", "@cairo.edu", "@oxford.ac.uk"];
     }
     return domains.map((d) => d.domain.toLowerCase());
@@ -22,75 +23,6 @@ async function getAllowedDomains() {
     return ["@harvard.edu", "@cairo.edu", "@oxford.ac.uk"];
   }
 }
-
-/* ============================================================
-   1️⃣ Request Email Verification (Dynamic Domain Logic)
-   ============================================================ */
-export const sendVerificationEmail = async (req, res) => {
-  try {
-    const { email, referralCode } = req.body;
-    if (!email)
-      return res
-        .status(400)
-        .json({ success: false, message: "Email is required" });
-
-    // ✅ Correct helper function now used
-    const allowedDomains = await getAllowedDomains();
-    const emailLower = email.toLowerCase();
-    const isUniversityEmail = allowedDomains.some((d) =>
-      emailLower.endsWith(d)
-    );
-
-    // ✅ CASE 1: University email → normal flow
-    if (isUniversityEmail) {
-      await sendVerificationMail(email);
-      return res.json({
-        success: true,
-        message: "Verification link sent to university email",
-      });
-    }
-
-    // ✅ CASE 2: Non-university email → referral required
-    if (!referralCode)
-      return res.status(400).json({
-        success: false,
-        message:
-          "Referral code required for non-university emails. Please enter a valid referral.",
-      });
-
-    const referrer = await Customer.findOne({
-      referralCode: referralCode.trim(),
-    });
-    if (!referrer)
-      return res
-        .status(404)
-        .json({ success: false, message: "Invalid referral code" });
-
-    const referrerEmail = referrer.email?.toLowerCase() || "";
-    const referrerIsUniversity = allowedDomains.some((d) =>
-      referrerEmail.endsWith(d)
-    );
-
-    if (!referrerIsUniversity) {
-      return res.status(403).json({
-        success: false,
-        message:
-          "This referral code is not linked to a verified university member",
-      });
-    }
-
-    // ✅ Referral verified — send verification email
-    await sendVerificationMail(email);
-    return res.json({
-      success: true,
-      message:
-        "Verification link sent (referral verified via university member)",
-    });
-  } catch (err) {
-    console.error("❌ sendVerificationEmail error:", err);
-    res.status(500).json({ success: false, message: "Server error" });
-  }
-};
 
 /* ============================================================
    📧 Helper: Send actual verification mail
@@ -119,6 +51,77 @@ async function sendVerificationMail(email) {
 }
 
 /* ============================================================
+   1️⃣ Request Email Verification (Handles missing referralCode)
+   ============================================================ */
+export const sendVerificationEmail = async (req, res) => {
+  try {
+    const { email, referralCode } = req.body;
+    if (!email)
+      return res
+        .status(400)
+        .json({ success: false, message: "Email is required" });
+
+    // ✅ Fetch allowed domains dynamically
+    const allowedDomains = await getAllowedDomains();
+    const emailLower = email.toLowerCase();
+    const isUniversityEmail = allowedDomains.some((d) =>
+      emailLower.endsWith(d)
+    );
+
+    // 🏫 CASE 1: University email → normal verification
+    if (isUniversityEmail) {
+      await sendVerificationMail(email);
+      return res.json({
+        success: true,
+        message: "Verification link sent to university email",
+      });
+    }
+
+    // 🧩 CASE 2: Personal email without referral
+    if (!referralCode || referralCode.trim() === "") {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Referral code required for non-university emails. Please enter a valid referral.",
+      });
+    }
+
+    // 🔍 Validate referral
+    const referrer = await Customer.findOne({
+      referralCode: referralCode.trim(),
+    });
+    if (!referrer)
+      return res
+        .status(404)
+        .json({ success: false, message: "Invalid referral code" });
+
+    const referrerEmail = referrer.email?.toLowerCase() || "";
+    const referrerIsUniversity = allowedDomains.some((d) =>
+      referrerEmail.endsWith(d)
+    );
+
+    if (!referrerIsUniversity) {
+      return res.status(403).json({
+        success: false,
+        message:
+          "This referral code is not linked to a verified university member",
+      });
+    }
+
+    // ✅ Referral valid → send verification
+    await sendVerificationMail(email);
+    return res.json({
+      success: true,
+      message:
+        "Verification link sent (referral verified via university member)",
+    });
+  } catch (err) {
+    console.error("❌ sendVerificationEmail error:", err);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+/* ============================================================
    2️⃣ Complete Profile Setup
    ============================================================ */
 export const completeProfile = async (req, res) => {
@@ -134,7 +137,7 @@ export const completeProfile = async (req, res) => {
 
     let user = await Customer.findOne({ email });
 
-    // Auto-create if not already verified
+    // Auto-create if not verified yet
     if (!user) {
       user = await Customer.create({
         email,
@@ -144,7 +147,6 @@ export const completeProfile = async (req, res) => {
       user.cartId = cart._id;
     }
 
-    // 🔐 Hash password & fill profile
     const hashed = await bcrypt.hash(password, 10);
     user.password = hashed;
     user.name = name;
@@ -153,18 +155,16 @@ export const completeProfile = async (req, res) => {
     user.university = university;
     user.isVerified = true;
 
-    // 🪄 Auto-generate referral code if missing
+    // Referral / wallet defaults
     if (!user.referralCode) {
       user.referralCode =
         "STARLY" + Math.random().toString(36).substring(2, 8).toUpperCase();
     }
-
-    // 💰 Wallet & referral fields
     if (typeof user.walletBalance === "undefined") user.walletBalance = 0;
     if (typeof user.referralEarnings === "undefined")
       user.referralEarnings = 0;
 
-    // 🧩 Link referrer if referral code provided
+    // Link referrer
     if (referralCode && referralCode.trim() !== "") {
       const referrer = await Customer.findOne({
         referralCode: referralCode.trim(),
@@ -174,7 +174,6 @@ export const completeProfile = async (req, res) => {
       }
     }
 
-    // 🛒 Ensure persistent cart exists
     if (!user.cartId) {
       const cart = await Cart.create({ userId: user._id, items: [] });
       user.cartId = cart._id;
@@ -195,9 +194,7 @@ export const completeProfile = async (req, res) => {
     });
   } catch (err) {
     console.error("Complete profile error:", err);
-    res
-      .status(500)
-      .json({ success: false, message: "Internal server error" });
+    res.status(500).json({ success: false, message: "Internal server error" });
   }
 };
 
@@ -218,7 +215,6 @@ export const verifyEmailToken = async (req, res) => {
         email: decoded.email,
         isVerified: true,
       });
-
       const cart = await Cart.create({ userId: newCustomer._id, items: [] });
       newCustomer.cartId = cart._id;
       await newCustomer.save();
@@ -233,12 +229,11 @@ export const verifyEmailToken = async (req, res) => {
 };
 
 /* ============================================================
-   4️⃣ Login (includes auto cart merge)
+   4️⃣ Login (auto cart merge)
    ============================================================ */
 export const login = async (req, res) => {
   try {
     const { email, password, sessionId } = req.body;
-
     const user = await Customer.findOne({ email });
     if (!user)
       return res
@@ -258,9 +253,8 @@ export const login = async (req, res) => {
     );
 
     let userCart = await Cart.findOne({ userId: user._id });
-    if (!userCart) {
+    if (!userCart)
       userCart = await Cart.create({ userId: user._id, items: [] });
-    }
 
     if (sessionId) {
       const guestCart = await Cart.findOne({ sessionId });
@@ -301,17 +295,11 @@ export const login = async (req, res) => {
       success: true,
       message: "Login successful",
       token,
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-      },
+      user: { id: user._id, name: user.name, email: user.email },
       cart: cartResponse,
     });
   } catch (err) {
     console.error("Login error:", err);
-    res
-      .status(500)
-      .json({ success: false, message: "Internal server error" });
+    res.status(500).json({ success: false, message: "Internal server error" });
   }
 };
