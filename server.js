@@ -17,6 +17,8 @@ import cartRoutes from "./routes/cartRoutes.js";
 import orderRoutes from "./routes/orderRoutes.js";
 import providerAuthRoutes from "./routes/providerAuthRoutes.js";
 import voucherRoutes from "./routes/voucherRoutes.js";
+import membershipRoutes from "./routes/membershipRoutes.js";
+import domainRoutes from "./routes/domainRoutes.js";
 
 dotenv.config();
 const app = express();
@@ -46,7 +48,10 @@ app.get("/", (req, res) => {
 });
 app.enable("trust proxy")
 // API routes
+
+app.use("/api/domains", domainRoutes);
 app.use("/api/vouchers", voucherRoutes);
+app.use("/api/memberships", membershipRoutes);
 app.use("/api/providers", providerRoutes);
 app.use("/api/provider/auth", providerAuthRoutes);
 app.use("/api/orders", orderRoutes);

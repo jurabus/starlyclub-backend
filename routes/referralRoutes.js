@@ -3,6 +3,56 @@ import Customer from "../models/Customer.js";
 
 const router = express.Router();
 
+// 🎓 Allowed university domains
+const ALLOWED_DOMAINS = ["@harvard.edu", "@cairo.edu", "@oxford.ac.uk"];
+
+/**
+ * ✅ GET /api/referral/check/:referralCode
+ * Check if referral code exists and belongs to an authorized university email
+ */
+router.get("/check/:referralCode", async (req, res) => {
+  try {
+    const code = req.params.referralCode.trim().toUpperCase();
+    if (!code || code.length < 4) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid referral code format" });
+    }
+
+    const referrer = await Customer.findOne({ referralCode: code });
+    if (!referrer)
+      return res
+        .status(404)
+        .json({ success: false, message: "Referral code not found" });
+
+    const email = referrer.email?.toLowerCase() || "";
+    const isUniversity = ALLOWED_DOMAINS.some((d) => email.endsWith(d));
+
+    if (!isUniversity) {
+      return res.status(403).json({
+        success: false,
+        valid: false,
+        message:
+          "Referrer is not from an authorized university domain. Referral invalid.",
+      });
+    }
+
+    res.json({
+      success: true,
+      valid: true,
+      referrer: {
+        name: referrer.name,
+        email: referrer.email,
+        university: referrer.university,
+      },
+      message: "Referral code valid and belongs to a university member",
+    });
+  } catch (err) {
+    console.error("Referral check error:", err);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+});
+
 /**
  * ✅ GET /api/referral/:userId
  * Fetch user's referral stats, code, wallet, and referral history
@@ -15,7 +65,9 @@ router.get("/:userId", async (req, res) => {
     });
 
     if (!user)
-      return res.status(404).json({ success: false, message: "User not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
 
     res.json({
       success: true,
@@ -33,7 +85,7 @@ router.get("/:userId", async (req, res) => {
 
 /**
  * ✅ POST /api/referral/link
- * Links a new user to a referrer during registration
+ * Link a new user to a referrer during registration
  */
 router.post("/link", async (req, res) => {
   try {
@@ -43,17 +95,24 @@ router.post("/link", async (req, res) => {
         .status(400)
         .json({ success: false, message: "Missing referralCode or email" });
 
-    const referrer = await Customer.findOne({ referralCode: referralCode.trim() });
+    const referrer = await Customer.findOne({
+      referralCode: referralCode.trim().toUpperCase(),
+    });
     const newUser = await Customer.findOne({ email: newUserEmail });
 
     if (!referrer)
-      return res.status(404).json({ success: false, message: "Referrer not found" });
-    if (!newUser)
-      return res.status(404).json({ success: false, message: "New user not found" });
-    if (newUser.referredBy)
       return res
-        .status(400)
-        .json({ success: false, message: "User already linked to a referrer" });
+        .status(404)
+        .json({ success: false, message: "Referrer not found" });
+    if (!newUser)
+      return res
+        .status(404)
+        .json({ success: false, message: "New user not found" });
+    if (newUser.referredBy)
+      return res.status(400).json({
+        success: false,
+        message: "User already linked to a referrer",
+      });
 
     newUser.referredBy = referrer._id;
     await newUser.save();
@@ -67,35 +126,46 @@ router.post("/link", async (req, res) => {
 
 /**
  * ✅ POST /api/referral/commission
- * Awards 50% commission to referrer when referred user purchases first membership
- * Body: { userId, membershipType, amount }
+ * Award 50% commission to referrer when referred user buys membership
  */
 router.post("/commission", async (req, res) => {
   try {
     const { userId, membershipType, amount } = req.body;
 
     if (!userId || !amount)
-      return res.status(400).json({ success: false, message: "Missing data" });
+      return res
+        .status(400)
+        .json({ success: false, message: "Missing data" });
 
     const user = await Customer.findById(userId);
     if (!user)
-      return res.status(404).json({ success: false, message: "User not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
 
     if (!user.referredBy)
-      return res.json({ success: true, message: "No referrer associated" });
+      return res.json({
+        success: true,
+        message: "No referrer associated",
+      });
 
     const referrer = await Customer.findById(user.referredBy);
     if (!referrer)
-      return res.status(404).json({ success: false, message: "Referrer not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Referrer not found" });
 
-    // Prevent double reward
+    // prevent duplicate commission
     const alreadyRewarded = referrer.referralHistory.some(
       (r) => r.referredUser?.toString() === user._id.toString()
     );
     if (alreadyRewarded)
-      return res.json({ success: false, message: "Commission already granted" });
+      return res.json({
+        success: false,
+        message: "Commission already granted",
+      });
 
-    const commission = amount * 0.5; // 50%
+    const commission = amount * 0.5;
     referrer.walletBalance += commission;
     referrer.referralEarnings += commission;
 
@@ -114,6 +184,40 @@ router.post("/commission", async (req, res) => {
     });
   } catch (e) {
     console.error("Referral commission error:", e);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+});
+
+/**
+ * ✅ GET /api/referral/rewards
+ * Admin: view all referral rewards
+ */
+router.get("/rewards", async (req, res) => {
+  try {
+    const customers = await Customer.find({})
+      .populate({
+        path: "referralHistory.referredUser",
+        select: "name email university",
+      })
+      .select("name email referralHistory");
+
+    const records = [];
+    for (const customer of customers) {
+      for (const record of customer.referralHistory || []) {
+        records.push({
+          referrer: { name: customer.name, email: customer.email },
+          referredUser: record.referredUser,
+          membershipType: record.membershipType,
+          commission: record.commission,
+          createdAt: record.createdAt,
+        });
+      }
+    }
+
+    records.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    res.json({ success: true, records });
+  } catch (err) {
+    console.error("Referral rewards fetch error:", err);
     res.status(500).json({ success: false, message: "Server error" });
   }
 });

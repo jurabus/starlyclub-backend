@@ -54,6 +54,20 @@ const customerSchema = new mongoose.Schema({
     enum: ["wallet", "credit_card", "cash_on_delivery", "none"],
     default: "none",
   },
+  // PATCH for models/Customer.js
+// Add the following block inside your existing customerSchema:
+
+usedOffers: [
+  {
+    providerId: { type: mongoose.Schema.Types.ObjectId, ref: "Provider" },
+    providerName: String,
+    providerLogo: String,
+    membershipType: String,   // plan name at scan time
+    discountPercent: Number,  // computed discount at scan time
+    scannedAt: { type: Date, default: Date.now },
+  },
+],
+
 
   joinedAt: { type: Date, default: Date.now },
 });

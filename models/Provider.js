@@ -12,6 +12,20 @@ const providerSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now },
   username: { type: String, unique: true, required: true },
   accessKey: { type: String, required: true },
+  // PATCH for models/Provider.js
+// Add the following fields into your existing providerSchema definition:
+
+maximumDiscount: { type: Number, default: 0, min: 0, max: 100 }, // provider's max discount %
+scannedCardsCount: { type: Number, default: 0 },                  // total successful membership scans
+scanHistory: [
+  {
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: "Customer" },
+    membershipType: String, // plan name
+    discountPercent: Number,
+    scannedAt: { type: Date, default: Date.now },
+  },
+],
+
 });
 
 export default mongoose.model("Provider", providerSchema);
