@@ -3,13 +3,47 @@ import Customer from "../models/Customer.js";
 
 const router = express.Router();
 
-// 🎓 Allowed university domains
+/* ============================================================
+   🎁 ADMIN: View All Referral Rewards (must come BEFORE /:userId)
+   ============================================================ */
+router.get("/rewards", async (req, res) => {
+  try {
+    const customers = await Customer.find({})
+      .populate({
+        path: "referralHistory.referredUser",
+        select: "name email university",
+      })
+      .select("name email referralHistory");
+
+    const records = [];
+
+    for (const customer of customers) {
+      for (const record of customer.referralHistory || []) {
+        records.push({
+          referrer: { name: customer.name, email: customer.email },
+          referredUser: record.referredUser,
+          membershipType: record.membershipType,
+          commission: record.commission,
+          createdAt: record.createdAt,
+        });
+      }
+    }
+
+    // Sort newest first
+    records.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+    res.json({ success: true, records });
+  } catch (err) {
+    console.error("❌ Referral rewards fetch error:", err);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+});
+
+/* ============================================================
+   🎓 Check Referral Code Validity
+   ============================================================ */
 const ALLOWED_DOMAINS = ["@harvard.edu", "@cairo.edu", "@oxford.ac.uk"];
 
-/**
- * ✅ GET /api/referral/check/:referralCode
- * Check if referral code exists and belongs to an authorized university email
- */
 router.get("/check/:referralCode", async (req, res) => {
   try {
     const code = req.params.referralCode.trim().toUpperCase();
@@ -48,15 +82,14 @@ router.get("/check/:referralCode", async (req, res) => {
       message: "Referral code valid and belongs to a university member",
     });
   } catch (err) {
-    console.error("Referral check error:", err);
+    console.error("❌ Referral check error:", err);
     res.status(500).json({ success: false, message: "Server error" });
   }
 });
 
-/**
- * ✅ GET /api/referral/:userId
- * Fetch user's referral stats, code, wallet, and referral history
- */
+/* ============================================================
+   👤 Get User Referral Stats (code, wallet, history)
+   ============================================================ */
 router.get("/:userId", async (req, res) => {
   try {
     const user = await Customer.findById(req.params.userId).populate({
@@ -78,15 +111,14 @@ router.get("/:userId", async (req, res) => {
       referralHistory: user.referralHistory,
     });
   } catch (e) {
-    console.error("Referral GET error:", e);
+    console.error("❌ Referral GET error:", e);
     res.status(500).json({ success: false, message: "Server error" });
   }
 });
 
-/**
- * ✅ POST /api/referral/link
- * Link a new user to a referrer during registration
- */
+/* ============================================================
+   🔗 Link New User to Referrer During Registration
+   ============================================================ */
 router.post("/link", async (req, res) => {
   try {
     const { referralCode, newUserEmail } = req.body;
@@ -119,15 +151,14 @@ router.post("/link", async (req, res) => {
 
     res.json({ success: true, message: "Referral successfully linked" });
   } catch (e) {
-    console.error("Referral link error:", e);
+    console.error("❌ Referral link error:", e);
     res.status(500).json({ success: false, message: "Server error" });
   }
 });
 
-/**
- * ✅ POST /api/referral/commission
- * Award 50% commission to referrer when referred user buys membership
- */
+/* ============================================================
+   💰 Credit Commission to Referrer (50%)
+   ============================================================ */
 router.post("/commission", async (req, res) => {
   try {
     const { userId, membershipType, amount } = req.body;
@@ -155,7 +186,7 @@ router.post("/commission", async (req, res) => {
         .status(404)
         .json({ success: false, message: "Referrer not found" });
 
-    // prevent duplicate commission
+    // Prevent duplicate commissions
     const alreadyRewarded = referrer.referralHistory.some(
       (r) => r.referredUser?.toString() === user._id.toString()
     );
@@ -183,41 +214,7 @@ router.post("/commission", async (req, res) => {
       commission,
     });
   } catch (e) {
-    console.error("Referral commission error:", e);
-    res.status(500).json({ success: false, message: "Server error" });
-  }
-});
-
-/**
- * ✅ GET /api/referral/rewards
- * Admin: view all referral rewards
- */
-router.get("/rewards", async (req, res) => {
-  try {
-    const customers = await Customer.find({})
-      .populate({
-        path: "referralHistory.referredUser",
-        select: "name email university",
-      })
-      .select("name email referralHistory");
-
-    const records = [];
-    for (const customer of customers) {
-      for (const record of customer.referralHistory || []) {
-        records.push({
-          referrer: { name: customer.name, email: customer.email },
-          referredUser: record.referredUser,
-          membershipType: record.membershipType,
-          commission: record.commission,
-          createdAt: record.createdAt,
-        });
-      }
-    }
-
-    records.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-    res.json({ success: true, records });
-  } catch (err) {
-    console.error("Referral rewards fetch error:", err);
+    console.error("❌ Referral commission error:", e);
     res.status(500).json({ success: false, message: "Server error" });
   }
 });
