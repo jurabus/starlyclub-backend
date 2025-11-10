@@ -10,7 +10,7 @@ import { mergeCarts as mergeCartUtility } from "../controllers/cartController.js
 /* ============================================================
    🧠 Helper: Fetch authorized domains dynamically from DB
    ============================================================ */
-async function getAllowedDomains() {
+async function getDomains() {
   try {
     const domains = await AuthorizedDomain.find({});
     if (!domains.length) {
