@@ -10,9 +10,18 @@ import { mergeCarts as mergeCartUtility } from "../controllers/cartController.js
 /* ============================================================
    🧠 Helper: Fetch authorized domains dynamically from DB
    ============================================================ */
-async function getDomains() {
-  const domains = await AuthorizedDomain.find({});
-  return domains.map((d) => d.domain.toLowerCase());
+async function getAllowedDomains() {
+  try {
+    const domains = await AuthorizedDomain.find({});
+    if (!domains.length) {
+      console.warn("⚠️ No authorized domains found in DB — using fallback list");
+      return ["@harvard.edu", "@cairo.edu", "@oxford.ac.uk"];
+    }
+    return domains.map((d) => d.domain.toLowerCase());
+  } catch (err) {
+    console.error("getAllowedDomains DB error:", err);
+    return ["@harvard.edu", "@cairo.edu", "@oxford.ac.uk"];
+  }
 }
 
 /* ============================================================
@@ -32,9 +41,7 @@ export const sendVerificationEmail = async (req, res) => {
       emailLower.endsWith(d)
     );
 
-    // ============================================================
-    // 🧩 CASE 1: University email → normal flow
-    // ============================================================
+    // 🧩 CASE 1: University email → skip referral
     if (isUniversityEmail) {
       await sendVerificationMail(email);
       return res.json({
@@ -43,9 +50,7 @@ export const sendVerificationEmail = async (req, res) => {
       });
     }
 
-    // ============================================================
-    // 🧩 CASE 2: Non-university email → referral required
-    // ============================================================
+    // 🧩 CASE 2: Personal email → referral required
     if (!referralCode)
       return res.status(400).json({
         success: false,
@@ -53,7 +58,7 @@ export const sendVerificationEmail = async (req, res) => {
           "Referral code required for non-university emails. Please enter a valid referral.",
       });
 
-    // 🔍 Find referrer and ensure their email belongs to an authorized domain
+    // 🔍 Check referral code + ensure referrer belongs to an authorized domain
     const referrer = await Customer.findOne({
       referralCode: referralCode.trim(),
     });
@@ -130,7 +135,7 @@ export const completeProfile = async (req, res) => {
 
     let user = await Customer.findOne({ email });
 
-    // Auto-create if not already verified (e.g., non-uni via referral)
+    // Auto-create if not already verified (e.g., referral case)
     if (!user) {
       user = await Customer.create({
         email,
@@ -140,7 +145,7 @@ export const completeProfile = async (req, res) => {
       user.cartId = cart._id;
     }
 
-    // 🔐 Hash password & fill profile
+    // 🔐 Hash password & complete profile
     const hashed = await bcrypt.hash(password, 10);
     user.password = hashed;
     user.name = name;
@@ -149,13 +154,13 @@ export const completeProfile = async (req, res) => {
     user.university = university;
     user.isVerified = true;
 
-    // 🪄 Auto-generate referral code if missing
+    // 🪄 Generate referral code if missing
     if (!user.referralCode) {
       user.referralCode =
         "STARLY" + Math.random().toString(36).substring(2, 8).toUpperCase();
     }
 
-    // 💰 Wallet & referral fields
+    // 💰 Wallet & referral defaults
     if (typeof user.walletBalance === "undefined") user.walletBalance = 0;
     if (typeof user.referralEarnings === "undefined")
       user.referralEarnings = 0;
@@ -170,7 +175,7 @@ export const completeProfile = async (req, res) => {
       }
     }
 
-    // 🛒 Ensure persistent cart exists
+    // 🛒 Ensure cart exists
     if (!user.cartId) {
       const cart = await Cart.create({ userId: user._id, items: [] });
       user.cartId = cart._id;
@@ -210,13 +215,10 @@ export const verifyEmailToken = async (req, res) => {
       return res.status(400).json({ message: "Already verified" });
 
     if (!existing) {
-      // ✅ Create verified account immediately
       const newCustomer = await Customer.create({
         email: decoded.email,
         isVerified: true,
       });
-
-      // ✅ Create a fresh empty cart and link it
       const cart = await Cart.create({ userId: newCustomer._id, items: [] });
       newCustomer.cartId = cart._id;
       await newCustomer.save();
@@ -249,14 +251,13 @@ export const login = async (req, res) => {
         .status(401)
         .json({ success: false, message: "Invalid credentials" });
 
-    // 🪪 Generate JWT
     const token = jwt.sign(
       { id: user._id, email: user.email },
       process.env.JWT_SECRET,
       { expiresIn: "7d" }
     );
 
-    // 🛒 Ensure user has a persistent cart
+    // 🛒 Ensure persistent cart
     let userCart = await Cart.findOne({ userId: user._id });
     if (!userCart) {
       userCart = await Cart.create({ userId: user._id, items: [] });
@@ -279,7 +280,6 @@ export const login = async (req, res) => {
       }
     }
 
-    // Populate the merged cart before returning
     const fullCart = await Cart.findById(mergedCart._id).populate(
       "items.productId"
     );
