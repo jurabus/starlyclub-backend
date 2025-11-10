@@ -1,7 +1,7 @@
 // controllers/universityAuthController.js
 import Customer from "../models/Customer.js";
 import Cart from "../models/Cart.js";
-import Domain from "../models/Domain.js";
+import AuthorizedDomain from "../models/AuthorizedDomain.js";
 import jwt from "jsonwebtoken";
 import nodemailer from "nodemailer";
 import bcrypt from "bcryptjs";
@@ -10,8 +10,8 @@ import { mergeCarts as mergeCartUtility } from "../controllers/cartController.js
 /* ============================================================
    🧠 Helper: Fetch authorized domains dynamically from DB
    ============================================================ */
-async function getAllowedDomains() {
-  const domains = await Domain.find({});
+async function getDomains() {
+  const domains = await AuthorizedDomain.find({});
   return domains.map((d) => d.domain.toLowerCase());
 }
 
