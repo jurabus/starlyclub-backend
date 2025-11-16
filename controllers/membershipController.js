@@ -29,6 +29,63 @@ export const listPlans = async (_req, res) => {
     res.status(500).json({ success: false, message: e.message });
   }
 };
+// ===========================================
+// 🚀 RENEW ACTIVE MEMBERSHIP (1 MONTH)
+// ===========================================
+export const renewMembership = async (req, res) => {
+  try {
+    const { userId } = req.body;
+
+    if (!userId)
+      return res.status(400).json({ success: false, message: "Missing userId" });
+
+    const user = await Customer.findById(userId);
+    if (!user)
+      return res.status(404).json({ success: false, message: "User not found" });
+
+    const membership = await UserMembership.findOne({ userId })
+      .populate("planId");
+
+    if (!membership)
+      return res.status(404).json({ success: false, message: "No active membership" });
+
+    const plan = membership.planId;
+    if (!plan)
+      return res.status(404).json({ success: false, message: "Plan not found" });
+
+    // 💸 monthly price = fraction * 100 SR (example)
+    const monthlyPrice = Math.round(plan.fraction * 100);
+
+    if (user.walletBalance < monthlyPrice) {
+      return res.status(400).json({
+        success: false,
+        message: "Insufficient wallet balance",
+      });
+    }
+
+    // Deduct wallet
+    user.walletBalance -= monthlyPrice;
+    await user.save();
+
+    // Extend membership 1 month
+    const newEndDate = new Date(membership.endDate);
+    newEndDate.setMonth(newEndDate.getMonth() + 1);
+
+    membership.endDate = newEndDate;
+    membership.isActive = true;
+    await membership.save();
+
+    res.json({
+      success: true,
+      message: "Membership renewed successfully!",
+      newEndDate,
+      walletBalance: user.walletBalance,
+    });
+  } catch (e) {
+    console.error("❌ renewMembership error:", e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
 
 
 export const getPlan = async (req, res) => {
@@ -74,7 +131,7 @@ export const deletePlan = async (req, res) => {
 /* -------------------- Admin: Assign / Create Membership -------------------- */
 export const assignMembership = async (req, res) => {
   try {
-    const { userId, planId, startDate, endDate, months, cardCode, amount } = req.body;
+    const { userId, planId, months } = req.body;
 
     const user = await Customer.findById(userId);
     if (!user)
@@ -84,15 +141,59 @@ export const assignMembership = async (req, res) => {
     if (!plan)
       return res.status(404).json({ success: false, message: "Plan not found" });
 
-    let start = startDate ? new Date(startDate) : new Date();
-    let end = endDate ? new Date(endDate) : null;
-    if (!end) {
-      const m = Number(months) > 0 ? Number(months) : 12;
-      end = new Date(start);
-      end.setMonth(end.getMonth() + m);
+    /* ---------------------------------------------------
+     🔥 MEMBERSHIP PRICE (You can modify this anytime)
+     ---------------------------------------------------*/
+    const RENEW_PRICE = 20;         // renewing same plan = 20 SR
+    const MIGRATE_PRICE = 20;       // migrating to another plan = 20 SR
+
+    // Check existing membership
+    const existing = await UserMembership.findOne({ userId });
+
+    let chargeAmount = 0;
+
+    if (existing) {
+      const existingPlanId = existing.planId?.toString();
+      const samePlan = existingPlanId === planId.toString();
+
+      if (samePlan) {
+        // 🔄 RENEW
+        chargeAmount = RENEW_PRICE;
+      } else {
+        // 🔀 MIGRATE
+        chargeAmount = MIGRATE_PRICE;
+      }
+    } else {
+      // 🆕 NEW SUBSCRIPTION (1 year)
+      chargeAmount = 20; // If you want new plan to cost same = 20 SR
     }
 
-    // Upsert (one active membership per user)
+    /* ---------------------------------------------------
+     🔥 Deduct from wallet
+     ---------------------------------------------------*/
+    if (user.walletBalance < chargeAmount) {
+      return res.status(400).json({
+        success: false,
+        message: "Insufficient wallet balance",
+      });
+    }
+
+    user.walletBalance -= chargeAmount;
+    await user.save();
+
+    /* ---------------------------------------------------
+     🔄 Calculate new membership start/end
+     ---------------------------------------------------*/
+    let start = existing ? existing.startDate : new Date();
+    let end = existing ? new Date(existing.endDate) : new Date();
+
+    // Extend or set new months
+    const extendMonths = Number(months) > 0 ? Number(months) : 1;
+    end.setMonth(end.getMonth() + extendMonths);
+
+    /* ---------------------------------------------------
+     🔐 UPSERT INTO DB
+     ---------------------------------------------------*/
     const membership = await UserMembership.findOneAndUpdate(
       { userId },
       {
@@ -100,52 +201,27 @@ export const assignMembership = async (req, res) => {
         planId,
         startDate: start,
         endDate: end,
-        cardCode,
         isActive: true,
       },
       { new: true, upsert: true }
     ).populate("planId");
 
-    /* -------------------------------------------
-       💸 AUTO REFERRAL COMMISSION TRIGGER
-       ------------------------------------------- */
-    if (user.referredBy && Number(amount) > 0) {
-      try {
-        const referrer = await Customer.findById(user.referredBy);
-        if (referrer) {
-          const alreadyRewarded = referrer.referralHistory.some(
-            (r) => r.referredUser?.toString() === user._id.toString()
-          );
-          if (!alreadyRewarded) {
-            const commission = Number(amount) * 0.5; // 50 %
-            referrer.walletBalance += commission;
-            referrer.referralEarnings += commission;
-            referrer.referralHistory.push({
-              referredUser: user._id,
-              membershipType: plan.name,
-              commission,
-            });
-            await referrer.save();
-
-            console.log(
-              `💰 Referral bonus: ${commission} credited to ${referrer.name || referrer.email}`
-            );
-          }
-        }
-      } catch (e) {
-        console.error("Referral reward error:", e.message);
-      }
-    }
-
     res.status(201).json({
       success: true,
-      message: "Membership assigned successfully",
+      message: existing
+        ? (existing.planId.toString() === planId.toString()
+            ? "Membership renewed successfully"
+            : "Membership migrated successfully")
+        : "Membership activated successfully",
       membership,
+      newBalance: user.walletBalance,
     });
   } catch (e) {
-    res.status(400).json({ success: false, message: e.message });
+    console.error("Assign error:", e);
+    res.status(500).json({ success: false, message: e.message });
   }
 };
+
 
 
 /* -------------------- User: Get Card + QR Token -------------------- */
