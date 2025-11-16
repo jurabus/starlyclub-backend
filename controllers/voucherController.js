@@ -3,38 +3,30 @@ import Provider from "../models/Provider.js";
 import Customer from "../models/Customer.js";
 import crypto from "crypto";
 
-/* ==========================================================
-   1) USER PURCHASES A VOUCHER
-   ========================================================== */
+// ===========================================
+// 1) USER CREATES A VOUCHER
+// ===========================================
 export const purchaseVoucher = async (req, res) => {
   try {
     const { userId, providerId, amount } = req.body;
 
     if (!userId || !providerId || !amount)
-      return res
-        .status(400)
-        .json({ success: false, message: "Missing data" });
+      return res.status(400).json({ success: false, message: "Missing data" });
 
     const provider = await Provider.findById(providerId);
     if (!provider)
-      return res
-        .status(404)
-        .json({ success: false, message: "Provider not found" });
+      return res.status(404).json({ success: false, message: "Provider not found" });
 
     const user = await Customer.findById(userId);
     if (!user)
-      return res
-        .status(404)
-        .json({ success: false, message: "User not found" });
+      return res.status(404).json({ success: false, message: "User not found" });
 
     const disc = provider.voucherDiscountPercent || 0;
     const price = amount - (amount * disc) / 100;
     const finalPrice = Math.round(price);
 
     if (user.walletBalance < finalPrice)
-      return res
-        .status(400)
-        .json({ success: false, message: "Insufficient wallet balance" });
+      return res.status(400).json({ success: false, message: "Insufficient wallet balance" });
 
     // Deduct from wallet
     user.walletBalance -= finalPrice;
@@ -59,36 +51,35 @@ export const purchaseVoucher = async (req, res) => {
       newBalance: user.walletBalance,
     });
   } catch (err) {
-    console.error("❌ purchaseVoucher error:", err);
+    console.error("❌ Purchase voucher error:", err);
     res.status(500).json({ success: false, message: err.message });
   }
 };
 
-/* ==========================================================
-   2) LIST VOUCHERS FOR A USER
-   ========================================================== */
+// ===========================================
+// 2) USER LISTS THEIR VOUCHERS
+// ===========================================
 export const getUserVouchers = async (req, res) => {
   try {
-    const { userId } = req.query;
+    const userId = req.query.userId;
+
     if (!userId)
-      return res
-        .status(400)
-        .json({ success: false, message: "Missing userId" });
+      return res.status(400).json({ success: false, message: "Missing userId" });
 
     const vouchers = await Voucher.find({ userId })
-      .sort({ purchasedAt: -1 })
-      .lean();
+      .populate("provider", "name logoUrl")
+      .sort({ createdAt: -1 });
 
     res.json({ success: true, vouchers });
-  } catch (err) {
-    console.error("❌ getUserVouchers error:", err);
-    res.status(500).json({ success: false, message: err.message });
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message });
   }
 };
 
-/* ==========================================================
-   3) ADMIN LISTS ALL VOUCHERS
-   ========================================================== */
+
+// ===========================================
+// 3) ADMIN LISTS ALL VOUCHERS
+// ===========================================
 export const adminListVouchers = async (req, res) => {
   try {
     const vouchers = await Voucher.find()
@@ -104,26 +95,23 @@ export const adminListVouchers = async (req, res) => {
   }
 };
 
-/* ==========================================================
-   4) USER REQUESTS QR FOR A VOUCHER
-   ========================================================== */
+// ===========================================
+// 4) ISSUE QR FOR A VOUCHER (USER)
+// ===========================================
 export const issueVoucherQR = async (req, res) => {
   try {
     const { id } = req.params;
 
     const voucher = await Voucher.findById(id);
     if (!voucher)
-      return res
-        .status(404)
-        .json({ success: false, message: "Voucher not found" });
+      return res.status(404).json({ success: false, message: "Voucher not found" });
 
     if (voucher.status !== "unused")
-      return res.status(400).json({
-        success: false,
-        message: "Only unused vouchers can generate QR",
-      });
+      return res
+        .status(400)
+        .json({ success: false, message: "Only unused vouchers can generate QR" });
 
-    const TTL = 90; // 90 sec
+    const TTL = 90;
     const code = crypto.randomBytes(4).toString("hex").toUpperCase();
     const expiresAt = new Date(Date.now() + TTL * 1000);
 
@@ -132,10 +120,8 @@ export const issueVoucherQR = async (req, res) => {
     voucher.qrExpiresAt = expiresAt;
     await voucher.save();
 
-    // FIX: use correct voucher validate endpoint
     const proto =
-      (req.headers["x-forwarded-proto"] || "").split(",")[0] ||
-      req.protocol;
+      (req.headers["x-forwarded-proto"] || "").split(",")[0] || req.protocol;
     const host = req.get("host");
 
     const validationUrl = `${proto}://${host}/api/vouchers/qr/validate/${code}`;
@@ -152,9 +138,9 @@ export const issueVoucherQR = async (req, res) => {
   }
 };
 
-/* ==========================================================
-   5) PROVIDER SCANS & VALIDATES VOUCHER
-   ========================================================== */
+// ===========================================
+// 5) VALIDATE QR (PROVIDER SCANNER)
+// ===========================================
 export const validateVoucherQR = async (req, res) => {
   try {
     const code = (req.params.code || "").trim().toUpperCase();
@@ -163,10 +149,7 @@ export const validateVoucherQR = async (req, res) => {
     const voucher = await Voucher.findOne({
       currentQrCode: code,
       status: "unused",
-      $or: [
-        { qrExpiresAt: { $exists: false } },
-        { qrExpiresAt: { $gt: now } },
-      ],
+      $or: [{ qrExpiresAt: { $exists: false } }, { qrExpiresAt: { $gt: now } }],
     }).populate("provider");
 
     if (!voucher) {
