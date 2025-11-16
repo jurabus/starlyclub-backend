@@ -8,7 +8,6 @@ import universityAuthRoutes from "./routes/universityAuthRoutes.js";
 import providerRoutes from "./routes/providerRoutes.js";
 import offerRoutes from "./routes/offerRoutes.js";
 import qrRoutes from "./routes/qrRoutes.js";
-import seedRoutes from "./routes/seedRoutes.js";
 import referralRoutes from "./routes/referralRoutes.js";
 import walletRoutes from "./routes/walletRoutes.js";
 import customerRoutes from "./routes/customerRoutes.js";
@@ -68,6 +67,5 @@ app.use("/api/university", universityAuthRoutes);
 app.use("/api/join-request", joinRequestRoutes);
 app.use("/api/upload", uploadRoutes);
 app.use("/api/qr", qrRoutes);
-app.use("/api/admin", seedRoutes);
 // ====== START SERVER ======
 app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
