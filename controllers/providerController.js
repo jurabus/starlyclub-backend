@@ -1,9 +1,11 @@
+// controllers/providerController.js
 import Provider from "../models/Provider.js";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
 import Offer from "../models/Offer.js";
 import Voucher from "../models/Voucher.js";
+
 // === 1️⃣ Configure local uploads ===
 const uploadDir = "uploads";
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir);
@@ -55,7 +57,6 @@ export const getProviders = async (req, res) => {
   }
 };
 
-
 export const createProvider = async (req, res) => {
   try {
     const provider = new Provider({
@@ -68,6 +69,12 @@ export const createProvider = async (req, res) => {
       username: req.body.username,
       accessKey: req.body.accessKey,
       featured: req.body.featured || false,
+
+      // 🔹 NEW: allow setting voucher discount at creation (optional)
+      voucherDiscountPercent:
+        typeof req.body.voucherDiscountPercent === "number"
+          ? req.body.voucherDiscountPercent
+          : 0,
     });
 
     await provider.save();
@@ -87,15 +94,19 @@ export const updateProvider = async (req, res) => {
       description: req.body.description,
       logoUrl: req.body.logoUrl,
       featured: req.body.featured,
+
+      // 🔹 NEW: provider can edit voucher discount % from dashboard
+      voucherDiscountPercent: req.body.voucherDiscountPercent,
     };
-    const provider = await Provider.findByIdAndUpdate(req.params.id, update, { new: true });
+
+    const provider = await Provider.findByIdAndUpdate(req.params.id, update, {
+      new: true,
+    });
     res.json({ success: true, provider });
   } catch (err) {
     res.status(400).json({ success: false, message: err.message });
   }
 };
-
-
 
 export const deleteProvider = async (req, res) => {
   try {

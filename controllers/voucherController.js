@@ -1,169 +1,182 @@
 import Voucher from "../models/Voucher.js";
 import Provider from "../models/Provider.js";
+import Customer from "../models/Customer.js";
+import crypto from "crypto";
 
-// ========== CREATE VOUCHER ==========
-export const createVoucher = async (req, res) => {
+// ===========================================
+// 1) USER CREATES A VOUCHER
+// ===========================================
+export const purchaseVoucher = async (req, res) => {
   try {
-    const {
-      providerId,
-      faceValue,
-      price,
-      stock,
-      currency,
-      featured,
-      isActive,
-      name,
-      category,
-      subcategory,
-      area,
-      logoUrl,
-    } = req.body;
+    const { userId, providerId, amount } = req.body;
+
+    if (!userId || !providerId || !amount)
+      return res.status(400).json({ success: false, message: "Missing data" });
 
     const provider = await Provider.findById(providerId);
-    if (!provider) return res.status(404).json({ error: "Provider not found" });
+    if (!provider)
+      return res.status(404).json({ success: false, message: "Provider not found" });
 
-    const voucherName =
-      name ||
-      `${provider.name} Voucher ${faceValue || ""} ${currency || "SR"}`.trim();
+    const user = await Customer.findById(userId);
+    if (!user)
+      return res.status(404).json({ success: false, message: "User not found" });
 
-    const doc = await Voucher.create({
+    const disc = provider.voucherDiscountPercent || 0;
+    const price = amount - (amount * disc) / 100;
+    const finalPrice = Math.round(price);
+
+    if (user.walletBalance < finalPrice)
+      return res.status(400).json({ success: false, message: "Insufficient wallet balance" });
+
+    // Deduct from wallet
+    user.walletBalance -= finalPrice;
+    await user.save();
+
+    const voucher = await Voucher.create({
       provider: provider._id,
       providerName: provider.name,
-      faceValue,
-      price,
-      currency: currency || "SR",
-      stock: stock ?? 0,
-      logoUrl: logoUrl || provider.logoUrl || "",
-      featured: !!featured,
-      isActive: isActive !== false,
-      name: voucherName,
-      category: category || provider.category || "General",
-      subcategory: subcategory || provider.subcategory || "",
-      area: area || provider.area || "Jeddah",
+      logoUrl: provider.logoUrl || "",
+      currency: "SR",
+      faceValue: amount,
+      price: finalPrice,
+      discountPercent: disc,
+      userId: userId,
+      status: "unused",
+      name: `${provider.name} Voucher ${amount} SR`,
     });
 
-    res.status(201).json({ success: true, voucher: doc });
+    res.status(201).json({
+      success: true,
+      voucher,
+      newBalance: user.walletBalance,
+    });
   } catch (err) {
-    console.error("❌ Create voucher error:", err);
-    res.status(500).json({ error: err.message });
+    console.error("❌ Purchase voucher error:", err);
+    res.status(500).json({ success: false, message: err.message });
   }
 };
 
-// ========== LIST ALL VOUCHERS ==========
-export const listVouchers = async (req, res) => {
+// ===========================================
+// 2) USER LISTS THEIR VOUCHERS
+// ===========================================
+export const getUserVouchers = async (req, res) => {
   try {
-    const { area, category, subcategory, featured, limit = 50, page = 1 } =
-      req.query;
+    const { userId } = req.query;
+    if (!userId)
+      return res.status(400).json({ success: false, message: "Missing userId" });
 
-    const filter = { isActive: true };
-
-    if (area)
-      filter.area = new RegExp(area, "i");
-    if (category)
-      filter.category = new RegExp(category, "i");
-    if (subcategory)
-      filter.subcategory = new RegExp(subcategory, "i");
-    if (featured !== undefined)
-      filter.featured = featured === "true";
-
-    const skip = (parseInt(page) - 1) * parseInt(limit);
-
-    const vouchers = await Voucher.find(filter)
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(parseInt(limit))
+    const vouchers = await Voucher.find({ userId })
+      .sort({ purchasedAt: -1 })
       .lean();
 
-    res.json({ vouchers });
+    res.json({ success: true, vouchers });
   } catch (err) {
-    console.error("❌ List vouchers error:", err);
-    res.status(500).json({ error: err.message });
+    console.error("❌ getUserVouchers error:", err);
+    res.status(500).json({ success: false, message: err.message });
   }
 };
 
-// ========== VOUCHERS BY PROVIDER ==========
-export const providerVouchers = async (req, res) => {
+// ===========================================
+// 3) ADMIN LISTS ALL VOUCHERS
+// ===========================================
+export const adminListVouchers = async (req, res) => {
+  try {
+    const vouchers = await Voucher.find()
+      .populate("provider", "name logoUrl")
+      .populate("userId", "name email")
+      .sort({ createdAt: -1 })
+      .lean();
+
+    res.json({ success: true, vouchers });
+  } catch (err) {
+    console.error("❌ adminListVouchers error:", err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// ===========================================
+// 4) ISSUE QR FOR A VOUCHER (USER)
+// ===========================================
+export const issueVoucherQR = async (req, res) => {
   try {
     const { id } = req.params;
-    const { featured, area, limit = 50, page = 1 } = req.query;
 
-    const filter = {
-      provider: id,
-      isActive: true,
-    };
+    const voucher = await Voucher.findById(id);
+    if (!voucher)
+      return res.status(404).json({ success: false, message: "Voucher not found" });
 
-    if (featured !== undefined)
-      filter.featured = featured === "true";
-    if (area)
-      filter.area = new RegExp(area, "i");
+    if (voucher.status !== "unused")
+      return res
+        .status(400)
+        .json({ success: false, message: "Only unused vouchers can generate QR" });
 
-    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const TTL = 90;
+    const code = crypto.randomBytes(4).toString("hex").toUpperCase();
+    const expiresAt = new Date(Date.now() + TTL * 1000);
 
-    const vouchers = await Voucher.find(filter)
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(parseInt(limit))
-      .lean();
+    voucher.currentQrCode = code;
+    voucher.qrIssuedAt = new Date();
+    voucher.qrExpiresAt = expiresAt;
+    await voucher.save();
 
-    res.json({ vouchers });
-  } catch (err) {
-    console.error("❌ Provider vouchers error:", err);
-    res.status(500).json({ error: err.message });
-  }
-};
+    const proto =
+      (req.headers["x-forwarded-proto"] || "").split(",")[0] || req.protocol;
+    const host = req.get("host");
 
-// ========== GET SINGLE VOUCHER ==========
-export const getVoucher = async (req, res) => {
-  try {
-    const voucher = await Voucher.findById(req.params.id);
-    if (!voucher) return res.status(404).json({ error: "Voucher not found" });
-    res.json({ voucher });
-  } catch (err) {
-    console.error("❌ Get voucher error:", err);
-    res.status(500).json({ error: err.message });
-  }
-};
+    const validationUrl = `${proto}://${host}/api/vouchers/qr/validate/${code}`;
 
-// ========== UPDATE VOUCHER ==========
-export const updateVoucher = async (req, res) => {
-  try {
-    const updated = await Voucher.findByIdAndUpdate(req.params.id, req.body, {
-      new: true,
+    res.json({
+      success: true,
+      code,
+      expiresAt,
+      validationUrl,
     });
-    if (!updated) return res.status(404).json({ error: "Voucher not found" });
-    res.json({ success: true, voucher: updated });
   } catch (err) {
-    console.error("❌ Update voucher error:", err);
-    res.status(500).json({ error: err.message });
+    console.error("❌ issueVoucherQR error:", err);
+    res.status(500).json({ success: false, message: err.message });
   }
 };
 
-// ========== DELETE VOUCHER ==========
-export const deleteVoucher = async (req, res) => {
+// ===========================================
+// 5) VALIDATE QR (PROVIDER SCANNER)
+// ===========================================
+export const validateVoucherQR = async (req, res) => {
   try {
-    const deleted = await Voucher.findByIdAndDelete(req.params.id);
-    if (!deleted) return res.status(404).json({ error: "Voucher not found" });
-    res.json({ success: true, message: "Voucher deleted" });
-  } catch (err) {
-    console.error("❌ Delete voucher error:", err);
-    res.status(500).json({ error: err.message });
-  }
-};
+    const code = (req.params.code || "").trim().toUpperCase();
+    const now = new Date();
 
-// ========== FEATURED VOUCHERS ==========
-export const featuredVouchers = async (req, res) => {
-  try {
-    const vouchers = await Voucher.find({
-      featured: true,
-      isActive: true,
-    })
-      .sort({ createdAt: -1 })
-      .limit(20)
-      .lean();
+    const voucher = await Voucher.findOne({
+      currentQrCode: code,
+      status: "unused",
+      $or: [{ qrExpiresAt: { $exists: false } }, { qrExpiresAt: { $gt: now } }],
+    }).populate("provider");
 
-    res.json({ vouchers });
+    if (!voucher) {
+      return res.status(404).json({
+        success: false,
+        message: "Invalid or expired voucher QR",
+      });
+    }
+
+    voucher.status = "redeemed";
+    voucher.redeemedAt = new Date();
+    await voucher.save();
+
+    res.json({
+      success: true,
+      message: "Voucher validated successfully",
+      voucher: {
+        id: voucher._id,
+        faceValue: voucher.faceValue,
+        price: voucher.price,
+        userId: voucher.userId,
+        providerName: voucher.providerName,
+        provider: voucher.provider,
+        redeemedAt: voucher.redeemedAt,
+      },
+    });
   } catch (err) {
-    console.error("❌ Featured vouchers error:", err);
-    res.status(500).json({ error: err.message });
+    console.error("❌ validateVoucherQR error:", err);
+    res.status(500).json({ success: false, message: err.message });
   }
 };

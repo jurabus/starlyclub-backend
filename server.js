@@ -19,6 +19,8 @@ import providerAuthRoutes from "./routes/providerAuthRoutes.js";
 import voucherRoutes from "./routes/voucherRoutes.js";
 import membershipRoutes from "./routes/membershipRoutes.js";
 import domainRoutes from "./routes/domainRoutes.js";
+import voucherQrRoutes from "./routes/voucherQrRoutes.js";
+
 
 dotenv.config();
 const app = express();
@@ -50,6 +52,7 @@ app.enable("trust proxy")
 // API routes
 
 app.use("/api/domains", domainRoutes);
+app.use("/api/qr/voucher", voucherQrRoutes);
 app.use("/api/vouchers", voucherRoutes);
 app.use("/api/memberships", membershipRoutes);
 app.use("/api/providers", providerRoutes);

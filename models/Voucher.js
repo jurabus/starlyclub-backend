@@ -1,42 +1,45 @@
-// models/Voucher.js
 import mongoose from "mongoose";
 
 const voucherSchema = new mongoose.Schema(
   {
+    // 🔗 Provider relationship
     provider: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Provider",
       required: true,
       index: true,
     },
-    providerName: { type: String, required: true }, // denormalized for quick list rendering
-    logoUrl: { type: String, default: "" },          // voucher logo (can reuse provider logo)
+    providerName: { type: String, required: true },
+    logoUrl: { type: String, default: "" },
+
+    // 💰 Pricing
     currency: { type: String, default: "SR" },
+    faceValue: { type: Number, required: true }, // user-selected (50, 100, 150...)
+    price: { type: Number, required: true },     // discounted price
+    discountPercent: { type: Number, required: true },
 
-    // Pricing
-    faceValue: { type: Number, required: true },     // e.g. 500
-    price: { type: Number, required: true },         // e.g. 450 (discounted)
-    stock: { type: Number, default: 0 },             // available quantity
+    // 🔐 Voucher owner
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: "Customer", required: true },
 
-    // Flags
-    isActive: { type: Boolean, default: true },
-    featured: { type: Boolean, default: false },
+    // 🎫 Voucher status
+    status: { type: String, enum: ["unused", "redeemed", "expired"], default: "unused" },
 
-    // Optional: human name; if empty we’ll compute on the fly in controller
+    // 📅 Timestamps
+    purchasedAt: { type: Date, default: Date.now },
+    redeemedAt: { type: Date },
+
+    // 🔢 Optional name displayed to user
     name: { type: String, trim: true, default: "" },
-	category: { type: String, default: "" },
-    subcategory: { type: String, default: "" },
-    area: { type: String, default: "Cairo" },
+
+    // ⭐ Extra flags (optional)
+    isActive: { type: Boolean, default: true },
+
+    // 🧾 QR logic (temporary)
+    currentQrCode: { type: String },
+    qrIssuedAt: { type: Date },
+    qrExpiresAt: { type: Date },
   },
   { timestamps: true }
 );
-
-voucherSchema.virtual("discountPercent").get(function () {
-  if (!this.faceValue || !this.price) return 0;
-  return Math.round(((this.faceValue - this.price) / this.faceValue) * 100);
-});
-
-voucherSchema.set("toJSON", { virtuals: true });
-voucherSchema.set("toObject", { virtuals: true });
 
 export default mongoose.model("Voucher", voucherSchema);

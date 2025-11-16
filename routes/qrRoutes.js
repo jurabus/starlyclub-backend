@@ -1,8 +1,13 @@
 import express from "express";
 import Offer from "../models/Offer.js";
 import crypto from "crypto";
-
+import { issueVoucherQR, validateVoucherQR } from "../controllers/voucherController.js";
 const router = express.Router();
+
+
+
+router.post("/voucher/issue/:voucherId", issueVoucherQR);
+router.get("/voucher/validate/:code", validateVoucherQR);
 
 /**
  * POST /api/qr/issue/:offerId

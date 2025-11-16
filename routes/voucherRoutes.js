@@ -1,34 +1,23 @@
 import express from "express";
 import {
-  createVoucher,
-  listVouchers,
-  getVoucher,
-  updateVoucher,
-  deleteVoucher,
-  featuredVouchers,
-  providerVouchers,
+  purchaseVoucher,
+  getUserVouchers,
+  adminListVouchers,
+  issueVoucherQR,
+  validateVoucherQR,
 } from "../controllers/voucherController.js";
 
 const router = express.Router();
 
-// 🧾 General voucher routes
-router.get("/", listVouchers);
-router.get("/featured/list", featuredVouchers);
+// User actions
+router.post("/purchase", purchaseVoucher);
+router.get("/user/list", getUserVouchers);
 
-// 🎟️ Provider-specific vouchers
-router.get("/provider/:id", providerVouchers);
+// Admin action (VIEW ONLY — no editing)
+router.get("/admin/list", adminListVouchers);
 
-// 📄 Single voucher + CRUD
-router.get("/:id", getVoucher);
-
-// ✅ Create new voucher
-router.post("/", createVoucher);
-
-// ✅ Update voucher (accept both PUT and PATCH for compatibility)
-router.put("/:id", updateVoucher);
-router.patch("/:id", updateVoucher);
-
-// ✅ Delete voucher
-router.delete("/:id", deleteVoucher);
+// QR logic
+router.post("/qr/issue/:id", issueVoucherQR);
+router.get("/qr/validate/:code", validateVoucherQR);
 
 export default router;
