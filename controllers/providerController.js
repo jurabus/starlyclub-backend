@@ -3,7 +3,6 @@ import Provider from "../models/Provider.js";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
-import Offer from "../models/Offer.js";
 import Voucher from "../models/Voucher.js";
 
 // === 1️⃣ Configure local uploads ===
@@ -118,8 +117,7 @@ export const deleteProvider = async (req, res) => {
         .json({ success: false, message: "Provider not found" });
     }
 
-    // 🧹 Delete all offers linked to this provider
-    const offersResult = await Offer.deleteMany({ providerId: provider._id });
+
 
     // 🧹 Delete all vouchers linked to this provider
     const vouchersResult = await Voucher.deleteMany({ provider: provider._id });
@@ -129,13 +127,12 @@ export const deleteProvider = async (req, res) => {
       message: `Provider deleted successfully.`,
       summary: {
         providerId: provider._id,
-        offersDeleted: offersResult.deletedCount,
         vouchersDeleted: vouchersResult.deletedCount,
       },
     });
 
     console.log(
-      `🗑️ Deleted provider ${provider.name}: ${offersResult.deletedCount} offers, ${vouchersResult.deletedCount} vouchers`
+      `🗑️ Deleted provider ${provider.name}: ${vouchersResult.deletedCount} vouchers`
     );
   } catch (err) {
     console.error("❌ deleteProvider error:", err);
