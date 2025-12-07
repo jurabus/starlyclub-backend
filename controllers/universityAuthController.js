@@ -29,7 +29,7 @@ export async function getAllowedDomains() {
    ============================================================ */
 async function sendVerificationMail(email) {
   const token = jwt.sign({ email }, process.env.JWT_SECRET, {
-    expiresIn: "15m",
+    expiresIn: "24h",
   });
   const verificationLink = `${process.env.FRONTEND_URL}/create-profile?token=${token}`;
 
@@ -205,28 +205,56 @@ export const verifyEmailToken = async (req, res) => {
   try {
     const { token } = req.query;
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const existing = await Customer.findOne({ email: decoded.email });
 
-    if (existing && existing.isVerified)
-      return res.status(400).json({ message: "Already verified" });
+    const email = decoded.email;
 
-    if (!existing) {
-      const newCustomer = await Customer.create({
-        email: decoded.email,
+    let user = await Customer.findOne({ email });
+
+    if (!user) {
+      user = await Customer.create({
+        email,
         isVerified: true,
       });
-      const cart = await Cart.create({ userId: newCustomer._id, items: [] });
-      newCustomer.cartId = cart._id;
-      await newCustomer.save();
+
+      const cart = await Cart.create({ userId: user._id, items: [] });
+      user.cartId = cart._id;
+      await user.save();
     }
 
-    res.redirect(
-      `${process.env.FRONTEND_URL}/create-profile?verified=${decoded.email}`
-    );
+    // 🔥 Deep link for mobile app
+    const mobileLink = `starlyclub://verified?email=${email}`;
+
+    // 🔥 Fallback for browsers → opens Flutter Web
+    const webLink = `${process.env.FRONTEND_URL}/create-profile?verified=${email}`;
+
+    // 🔥 Smart redirect header (mobile → app, desktop → web)
+    return res.send(`
+      <html>
+        <head>
+          <meta http-equiv="refresh" content="0; url=${mobileLink}" />
+        </head>
+        <body>
+          <script>
+            // Try to open app
+            window.location = "${mobileLink}";
+
+            // If app not installed → fallback to web after 1s
+            setTimeout(function() {
+              window.location = "${webLink}";
+            }, 1000);
+          </script>
+          
+          <p>If you are not redirected, <a href="${webLink}">click here</a>.</p>
+        </body>
+      </html>
+    `);
+
   } catch (err) {
+    console.error("verifyEmailToken error:", err);
     res.status(400).json({ message: "Invalid or expired token" });
   }
 };
+
 
 /* ============================================================
    4️⃣ Login (auto cart merge)
