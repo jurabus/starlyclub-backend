@@ -9,8 +9,13 @@ const authorizedDomainSchema = new mongoose.Schema(
       trim: true,
       lowercase: true,
     },
+    universityName: {
+      type: String,
+      required: true,
+      trim: true,
+    },
     addedBy: {
-      type: String, // Admin username or ID
+      type: String,
       default: "system",
     },
   },

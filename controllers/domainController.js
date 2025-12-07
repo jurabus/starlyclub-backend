@@ -18,22 +18,28 @@ export const getDomains = async (req, res) => {
    ============================================================ */
 export const addDomain = async (req, res) => {
   try {
-    const { domain, addedBy } = req.body;
-    if (!domain?.trim())
-      return res
-        .status(400)
-        .json({ success: false, message: "Domain field required" });
+    const { domain, universityName, addedBy } = req.body;
+
+    if (!domain?.trim() || !universityName?.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "Both domain and universityName are required",
+      });
+    }
 
     const cleanDomain = domain.trim().toLowerCase();
+    const cleanName = universityName.trim();
 
     const exists = await AuthorizedDomain.findOne({ domain: cleanDomain });
     if (exists)
-      return res
-        .status(400)
-        .json({ success: false, message: "Domain already exists" });
+      return res.status(400).json({
+        success: false,
+        message: "Domain already exists",
+      });
 
     const newDomain = await AuthorizedDomain.create({
       domain: cleanDomain,
+      universityName: cleanName,
       addedBy: addedBy || "admin",
     });
 
@@ -44,41 +50,46 @@ export const addDomain = async (req, res) => {
   }
 };
 
+
 /* ============================================================
    ✏️ Update domain
    ============================================================ */
 export const updateDomain = async (req, res) => {
   try {
     const { id } = req.params;
-    const { domain } = req.body;
+    const { domain, universityName } = req.body;
 
-    if (!domain?.trim())
-      return res
-        .status(400)
-        .json({ success: false, message: "Domain field required" });
+    if (!domain?.trim() || !universityName?.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "Both domain and universityName are required",
+      });
+    }
 
     const cleanDomain = domain.trim().toLowerCase();
+    const cleanName = universityName.trim();
 
-    // Prevent duplicates
     const duplicate = await AuthorizedDomain.findOne({
       domain: cleanDomain,
       _id: { $ne: id },
     });
     if (duplicate)
-      return res
-        .status(400)
-        .json({ success: false, message: "Domain already exists" });
+      return res.status(400).json({
+        success: false,
+        message: "Domain already exists",
+      });
 
     const updated = await AuthorizedDomain.findByIdAndUpdate(
       id,
-      { domain: cleanDomain },
+      { domain: cleanDomain, universityName: cleanName },
       { new: true }
     );
 
     if (!updated)
-      return res
-        .status(404)
-        .json({ success: false, message: "Domain not found" });
+      return res.status(404).json({
+        success: false,
+        message: "Domain not found",
+      });
 
     res.json({ success: true, domain: updated });
   } catch (err) {
@@ -86,6 +97,7 @@ export const updateDomain = async (req, res) => {
     res.status(500).json({ success: false, message: "Server error" });
   }
 };
+
 
 /* ============================================================
    🗑️ Delete domain
