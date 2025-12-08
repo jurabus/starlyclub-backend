@@ -1,23 +1,19 @@
-// routes/orderRoutes.js
 import express from "express";
 import {
-  createOrder, listOrders, getOrder, updateOrderStatus, cancelOrder,
-  createOrderFromCart,  // ✅ add
+  checkout,
+  getOrders,
+  getOrderById
 } from "../controllers/orderController.js";
 
 const router = express.Router();
 
-router.get("/", listOrders);              // ?userId=&status=
-// Admin change status
-router.put("/:id/status", updateOrderStatus);
+// 🧾 Create order from cart
+router.post("/checkout", checkout);
 
-// User cancel (only pending)
-router.post("/:id/cancel", cancelOrder);
+// 📦 Get all orders for a user
+router.get("/user/:userId", getOrders);
 
-router.post("/", createOrder);
-router.post("/from-cart", createOrderFromCart); // ✅ add
-router.get("/:id", getOrder);
-
-
+// 🔍 Get single order by id
+router.get("/:id", getOrderById);
 
 export default router;
