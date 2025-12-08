@@ -1,21 +1,31 @@
-// routes/cartRoutes.js
 import express from "express";
 import {
   getCart,
   addToCart,
-  updateQty,
+  updateCartQty,
   clearCart,
-  mergeCart,          // NEW
-  checkoutPreview,    // NEW
+  mergeCarts,
+  checkoutPreview,
 } from "../controllers/cartController.js";
 
 const router = express.Router();
 
+// Get cart (user or session)
 router.get("/:userId", getCart);
-router.get("/:userId/preview", checkoutPreview); // NEW
+
+// Checkout preview
+router.get("/:userId/preview", checkoutPreview);
+
+// Add item to cart
 router.post("/", addToCart);
-router.post("/merge", mergeCart);                 // NEW
-router.put("/qty", updateQty);
+
+// Merge guest cart into user cart
+router.post("/merge", mergeCarts);
+
+// Update quantity
+router.put("/qty", updateCartQty);
+
+// Clear cart
 router.delete("/:userId", clearCart);
 
 export default router;
