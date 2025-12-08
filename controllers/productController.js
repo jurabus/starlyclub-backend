@@ -53,7 +53,60 @@ export const getProducts = async (req, res) => {
   }
 };
 
+export const getProduct = async (req, res) => {
+  try {
+    const product = await Product.findById(req.params.id).populate("providerId");
 
+    if (!product) {
+      return res.status(404).json({ success: false, message: "Product not found" });
+    }
+
+    res.json({
+      success: true,
+      product: {
+        ...product._doc,
+        imageUrl: product.imageUrl?.startsWith("http")
+          ? product.imageUrl
+          : `https://starlyclub-backend.onrender.com/uploads/${product.imageUrl}`,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+//
+export const updateProduct = async (req, res) => {
+  try {
+    let imageUrl = req.body.imageUrl;
+
+    // Replace image if new file uploaded
+    if (req.file) {
+      imageUrl = `${req.protocol}://${req.get("host")}/uploads/${req.file.filename}`;
+    }
+
+    const updated = await Product.findByIdAndUpdate(
+      req.params.id,
+      {
+        name: req.body.name,
+        imageUrl,
+        oldPrice: req.body.oldPrice,
+        newPrice: req.body.newPrice,
+      },
+      { new: true }
+    );
+
+    if (!updated) {
+      return res.status(404).json({ success: false, message: "Product not found" });
+    }
+
+    res.json({ success: true, product: updated });
+  } catch (err) {
+    res.status(400).json({ success: false, message: err.message });
+  }
+};
+
+//
 export const getProductsByProvider = async (req, res) => {
   try {
     const { providerId } = req.params;
