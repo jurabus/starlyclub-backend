@@ -10,13 +10,16 @@ import referralRoutes from "./routes/referralRoutes.js";
 import walletRoutes from "./routes/walletRoutes.js";
 import customerRoutes from "./routes/customerRoutes.js";
 import productRoutes from "./routes/productRoutes.js";
-import cartRoutes from "./routes/cartRoutes.js";
 import orderRoutes from "./routes/orderRoutes.js";
+import cartRoutes from "./routes/cartRoutes.js";
+
+import categoryRoutes from "./routes/categoryRoutes.js";
 import providerAuthRoutes from "./routes/providerAuthRoutes.js";
 import voucherRoutes from "./routes/voucherRoutes.js";
 import membershipRoutes from "./routes/membershipRoutes.js";
 import domainRoutes from "./routes/domainRoutes.js";
 import voucherQrRoutes from "./routes/voucherQrRoutes.js";
+import offerRoutes from "./routes/offerRoutes.js";
 
 
 dotenv.config();
@@ -50,16 +53,18 @@ app.enable("trust proxy")
 
 app.use("/api/domains", domainRoutes);
 app.use("/api/qr/voucher", voucherQrRoutes);
+app.use("/api/offers", offerRoutes);
 app.use("/api/vouchers", voucherRoutes);
 app.use("/api/memberships", membershipRoutes);
 app.use("/api/providers", providerRoutes);
 app.use("/api/provider/auth", providerAuthRoutes);
+app.use("/api/products", productRoutes);
 app.use("/api/orders", orderRoutes);
 app.use("/api/cart", cartRoutes);
+app.use("/api/categories", categoryRoutes);
 app.use("/api/referral", referralRoutes);
 app.use("/api/wallet", walletRoutes);
 app.use("/api/customer", customerRoutes);
-app.use("/api/products", productRoutes);
 app.use("/api/university", universityAuthRoutes);
 app.use("/api/join-request", joinRequestRoutes);
 app.use("/api/upload", uploadRoutes);

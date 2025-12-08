@@ -1,3 +1,4 @@
+
 // controllers/cartController.js
 import Cart from "../models/Cart.js";
 import Product from "../models/Product.js";
@@ -233,4 +234,3 @@ export const mergeCarts = async (req, res) => {
     res.status(500).json({ success: false, message: err.message });
   }
 };
-

@@ -31,7 +31,8 @@ async function sendVerificationMail(email) {
   const token = jwt.sign({ email }, process.env.JWT_SECRET, {
     expiresIn: "24h",
   });
-  const verificationLink = `${process.env.FRONTEND_URL}/create-profile?token=${token}`;
+  const verificationLink = `${process.env.FRONTEND_URL}/verify-email-success?token=${token}`;
+
 
   const transporter = nodemailer.createTransport({
     service: "gmail",
@@ -277,29 +278,31 @@ export const verifyEmailToken = async (req, res) => {
     const mobileLink = `starlyclub://verified?email=${email}`;
 
     // 🔥 Fallback for browsers → opens Flutter Web
-    const webLink = `${process.env.FRONTEND_URL}/create-profile?verified=${email}`;
+    const webLink = `${process.env.FRONTEND_URL}/verify-email-success?verified=${email}`;
+
 
     // 🔥 Smart redirect header (mobile → app, desktop → web)
-    return res.send(`
-      <html>
-        <head>
-          <meta http-equiv="refresh" content="0; url=${mobileLink}" />
-        </head>
-        <body>
-          <script>
-            // Try to open app
-            window.location = "${mobileLink}";
+   return res.send(`
+<html>
+  <head>
+    <meta http-equiv="refresh" content="0; url=${mobileLink}" />
+  </head>
+<body>
+<script>
+  // Attempt to open app
+  window.location = "${mobileLink}";
 
-            // If app not installed → fallback to web after 1s
-            setTimeout(function() {
-              window.location = "${webLink}";
-            }, 1000);
-          </script>
-          
-          <p>If you are not redirected, <a href="${webLink}">click here</a>.</p>
-        </body>
-      </html>
-    `);
+  // Fallback for desktop browsers
+  setTimeout(function() {
+    window.location = "${webLink}";
+  }, 800);
+</script>
+
+<p>If you are not redirected, <a href="${webLink}">click here</a>.</p>
+</body>
+</html>
+`);
+
 
   } catch (err) {
     console.error("verifyEmailToken error:", err);

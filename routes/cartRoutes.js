@@ -3,21 +3,19 @@ import express from "express";
 import {
   getCart,
   addToCart,
-  removeFromCart,
+  updateQty,
   clearCart,
-  mergeCarts,
+  mergeCart,          // NEW
+  checkoutPreview,    // NEW
 } from "../controllers/cartController.js";
 
 const router = express.Router();
 
-router.get("/:sessionId", getCart);
-router.get("/user/:userId", getCart);
+router.get("/:userId", getCart);
+router.get("/:userId/preview", checkoutPreview); // NEW
+router.post("/", addToCart);
+router.post("/merge", mergeCart);                 // NEW
+router.put("/qty", updateQty);
+router.delete("/:userId", clearCart);
 
-router.post("/add", addToCart);
-router.post("/remove", removeFromCart);
-router.delete("/clear/:sessionId", clearCart);
-router.delete("/clear/user/:userId", clearCart);
-
-// Merge guest → user
-router.post("/merge", mergeCarts);
 export default router;
