@@ -1,10 +1,12 @@
 import express from "express";
 import Customer from "../models/Customer.js";
+import UserMembership from "../models/UserMembership.js";   // ✅ REQUIRED
+import { getAllowedDomains } from "../controllers/universityAuthController.js";
 
 const router = express.Router();
 
 /* ============================================================
-   🎁 ADMIN: View All Referral Rewards (must come BEFORE /:userId)
+   🎁 ADMIN: View All Referral Rewards
    ============================================================ */
 router.get("/rewards", async (req, res) => {
   try {
@@ -29,9 +31,7 @@ router.get("/rewards", async (req, res) => {
       }
     }
 
-    // Sort newest first
     records.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-
     res.json({ success: true, records });
   } catch (err) {
     console.error("❌ Referral rewards fetch error:", err);
@@ -42,11 +42,10 @@ router.get("/rewards", async (req, res) => {
 /* ============================================================
    🎓 Check Referral Code Validity
    ============================================================ */
-const ALLOWED_DOMAINS = ["@harvard.edu", "@cairo.edu", "@oxford.ac.uk"];
-
 router.get("/check/:referralCode", async (req, res) => {
   try {
     const code = req.params.referralCode.trim().toUpperCase();
+
     if (!code || code.length < 4) {
       return res
         .status(400)
@@ -59,27 +58,45 @@ router.get("/check/:referralCode", async (req, res) => {
         .status(404)
         .json({ success: false, message: "Referral code not found" });
 
-    const email = referrer.email?.toLowerCase() || "";
-    const isUniversity = ALLOWED_DOMAINS.some((d) => email.endsWith(d));
+    // -------------------- DOMAIN CHECK --------------------
+    const allowedDomains = await getAllowedDomains();
+    const emailLower = (referrer.email || "").toLowerCase();
+    const isUniversity = allowedDomains.some((d) => emailLower.endsWith(d));
 
-    if (!isUniversity) {
-      return res.status(403).json({
-        success: false,
-        valid: false,
-        message:
-          "Referrer is not from an authorized university domain. Referral invalid.",
-      });
+    // -------------------- PLAN CHECK --------------------
+    const activeMembership = await UserMembership.findOne({
+      userId: referrer._id,
+      isActive: true,
+    }).populate("planId");
+
+    const referrerPlan = activeMembership?.planId?.name || null;
+
+    // -------------------- COMMISSION TIER --------------------
+    let commissionTier = "";
+    if (isUniversity) {
+      commissionTier = "university";
+    } else if (referrerPlan === "Starly Premium") {
+      commissionTier = "premium_non_university";
+    } else {
+      commissionTier = "non_commission";
     }
 
-    res.json({
+    return res.json({
       success: true,
       valid: true,
+      tier: commissionTier,
       referrer: {
         name: referrer.name,
         email: referrer.email,
         university: referrer.university,
+        activePlan: referrerPlan,
       },
-      message: "Referral code valid and belongs to a university member",
+      message:
+        commissionTier === "university"
+          ? "Referral valid — University referrer (50 SR max commission)."
+          : commissionTier === "premium_non_university"
+          ? "Referral valid — Premium referrer (50 SR max commission)."
+          : "Referral valid — No commission (non-university basic or unsubscribed).",
     });
   } catch (err) {
     console.error("❌ Referral check error:", err);
@@ -88,7 +105,7 @@ router.get("/check/:referralCode", async (req, res) => {
 });
 
 /* ============================================================
-   👤 Get User Referral Stats (code, wallet, history)
+   👤 User Referral Stats
    ============================================================ */
 router.get("/:userId", async (req, res) => {
   try {
@@ -117,11 +134,12 @@ router.get("/:userId", async (req, res) => {
 });
 
 /* ============================================================
-   🔗 Link New User to Referrer During Registration
+   🔗 Link New User to Referrer
    ============================================================ */
 router.post("/link", async (req, res) => {
   try {
     const { referralCode, newUserEmail } = req.body;
+
     if (!referralCode || !newUserEmail)
       return res
         .status(400)
@@ -157,7 +175,7 @@ router.post("/link", async (req, res) => {
 });
 
 /* ============================================================
-   💰 Credit Commission to Referrer (50%)
+   💰 CREDIT COMMISSION (Updated Full Logic)
    ============================================================ */
 router.post("/commission", async (req, res) => {
   try {
@@ -186,7 +204,7 @@ router.post("/commission", async (req, res) => {
         .status(404)
         .json({ success: false, message: "Referrer not found" });
 
-    // Prevent duplicate commissions
+    // Prevent duplicates
     const alreadyRewarded = referrer.referralHistory.some(
       (r) => r.referredUser?.toString() === user._id.toString()
     );
@@ -196,7 +214,35 @@ router.post("/commission", async (req, res) => {
         message: "Commission already granted",
       });
 
-    const commission = amount * 0.5;
+    // -------------------- Eligibility Check --------------------
+    const allowedDomains = await getAllowedDomains();
+    const emailLower = (referrer.email || "").toLowerCase();
+    const isUniversity = allowedDomains.some((d) => emailLower.endsWith(d));
+
+    const activeMembership = await UserMembership.findOne({
+      userId: referrer._id,
+      isActive: true,
+    }).populate("planId");
+
+    const referrerPlan = activeMembership?.planId?.name || null;
+
+    let eligible = false;
+
+    if (isUniversity) {
+      eligible = true;
+    } else if (referrerPlan === "Starly Premium") {
+      eligible = true;
+    }
+
+    // -------------------- Compute Commission --------------------
+    let commission = 0;
+
+    if (eligible) {
+      commission = amount * 0.5;
+      if (commission > 50) commission = 50;
+    }
+
+    // -------------------- Apply Commission --------------------
     referrer.walletBalance += commission;
     referrer.referralEarnings += commission;
 
@@ -208,9 +254,12 @@ router.post("/commission", async (req, res) => {
 
     await referrer.save();
 
-    res.json({
+    return res.json({
       success: true,
-      message: "Commission credited successfully",
+      message:
+        commission > 0
+          ? `Commission credited: ${commission} SR`
+          : "User referred successfully (no commission for current plan)",
       commission,
     });
   } catch (e) {

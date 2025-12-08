@@ -34,6 +34,13 @@ const providerSchema = new mongoose.Schema({
     max: 100,
     default: 0,
   },
+
+minimumVoucherAmount: {
+  type: Number,
+  min: 0,
+  default: 0, // 0 means user should see increments of 50
+},
+
 });
 
 export default mongoose.model("Provider", providerSchema);

@@ -106,12 +106,30 @@ export const issueVoucherQR = async (req, res) => {
     if (!voucher)
       return res.status(404).json({ success: false, message: "Voucher not found" });
 
-    if (voucher.status !== "unused")
-      return res
-        .status(400)
-        .json({ success: false, message: "Only unused vouchers can generate QR" });
+   // ❗ 28-DAY EXPIRY CHECK
+const expiryDate = new Date(voucher.purchasedAt);
+expiryDate.setDate(expiryDate.getDate() + 28);
+const now = new Date();
 
-    const TTL = 90;
+if (now > expiryDate) {
+  voucher.status = "expired";
+  await voucher.save();
+  return res.status(400).json({
+    success: false,
+    message: "Voucher expired after 28 days",
+  });
+}
+
+// ❗ Only unused vouchers allowed
+if (voucher.status !== "unused") {
+  return res.status(400).json({
+    success: false,
+    message: "Only unused vouchers can generate QR",
+  });
+}
+
+
+    const TTL = 30;
     const code = crypto.randomBytes(4).toString("hex").toUpperCase();
     const expiresAt = new Date(Date.now() + TTL * 1000);
 
@@ -144,20 +162,43 @@ export const issueVoucherQR = async (req, res) => {
 export const validateVoucherQR = async (req, res) => {
   try {
     const code = (req.params.code || "").trim().toUpperCase();
-    const now = new Date();
+const now = new Date();
 
-    const voucher = await Voucher.findOne({
-      currentQrCode: code,
-      status: "unused",
-      $or: [{ qrExpiresAt: { $exists: false } }, { qrExpiresAt: { $gt: now } }],
-    }).populate("provider");
+// Find matching voucher with valid QR
+let voucher = await Voucher.findOne({
+  currentQrCode: code,
+  status: "unused",
+})
+  .populate("provider");
 
-    if (!voucher) {
-      return res.status(404).json({
-        success: false,
-        message: "Invalid or expired voucher QR",
-      });
-    }
+if (!voucher) {
+  return res.status(404).json({
+    success: false,
+    message: "Invalid or expired voucher QR",
+  });
+}
+
+// ❗ Check QR expiry (30 seconds)
+if (!voucher.qrExpiresAt || voucher.qrExpiresAt < now) {
+  return res.status(400).json({
+    success: false,
+    message: "QR code expired",
+  });
+}
+
+// ❗ 28-DAY EXPIRY CHECK
+const expiryDate = new Date(voucher.purchasedAt);
+expiryDate.setDate(expiryDate.getDate() + 28);
+
+if (now > expiryDate) {
+  voucher.status = "expired";
+  await voucher.save();
+  return res.status(400).json({
+    success: false,
+    message: "Voucher has expired",
+  });
+}
+
 
     voucher.status = "redeemed";
     voucher.redeemedAt = new Date();

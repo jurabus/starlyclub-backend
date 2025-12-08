@@ -198,6 +198,58 @@ export const completeProfile = async (req, res) => {
   }
 };
 
+//
+/* ============================================================
+   🔥 QUICK LOGIN AFTER EMAIL VERIFICATION (No password needed)
+   ============================================================ */
+export const quickVerifyLogin = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email)
+      return res.status(400).json({
+        success: false,
+        message: "Email is required",
+      });
+
+    const user = await Customer.findOne({ email });
+
+    if (!user)
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+
+    if (!user.isVerified) {
+      user.isVerified = true;
+      await user.save();
+    }
+
+    // Generate token (same expiry as normal login)
+    const token = jwt.sign(
+      { id: user._id, email: user.email },
+      process.env.JWT_SECRET,
+      { expiresIn: "7d" }
+    );
+
+    return res.json({
+      success: true,
+      token,
+      user: {
+        id: user._id,
+        email: user.email,
+        name: user.name,
+      },
+    });
+  } catch (err) {
+    console.error("quickVerifyLogin error:", err);
+    res.status(500).json({
+      success: false,
+      message: "Server error during quick verification login",
+    });
+  }
+};
+
 /* ============================================================
    3️⃣ Verify Token and Pre-create Account
    ============================================================ */

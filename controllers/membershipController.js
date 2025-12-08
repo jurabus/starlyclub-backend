@@ -205,6 +205,29 @@ export const assignMembership = async (req, res) => {
       },
       { new: true, upsert: true }
     ).populate("planId");
+/* ----------------------------------------------------------
+   ⭐ REFERRAL COMMISSION TRIGGER (NEW PATCH)
+   ----------------------------------------------------------*/
+try {
+  if (user.referredBy) {
+    const commissionAmount = chargeAmount; // final price paid by the user
+
+    await fetch(
+      "https://starlyclub-backend.onrender.com/api/referral/commission",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: user._id,
+          membershipType: plan.name,   // e.g. "Starly Premium"
+          amount: commissionAmount,     // real paid amount, ex: 99, 199, 299 or 20
+        }),
+      }
+    );
+  }
+} catch (e) {
+  console.error("❌ Referral commission auto-trigger failed:", e.message);
+}
 
     res.status(201).json({
       success: true,
