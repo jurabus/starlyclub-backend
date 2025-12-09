@@ -8,13 +8,42 @@ import Product from "../models/Product.js";
 // 🧾 Create PICKUP Order
 export const checkout = async (req, res) => {
   try {
-    const { sessionId, userId } = req.body;
+    const { sessionId, userId, directItems } = req.body;
 
     if (!sessionId && !userId)
       return res
         .status(400)
         .json({ success: false, message: "Missing identifiers" });
 
+    // 🟡 CASE 1: DIRECT PRODUCT CHECKOUT
+    if (directItems && Array.isArray(directItems) && directItems.length > 0) {
+      const total = directItems.reduce(
+        (sum, i) => sum + i.price * i.quantity,
+        0
+      );
+
+      // direct product always contains providerId passed from frontend
+      const providerId = directItems[0].providerId;
+
+      const order = await Order.create({
+        userId,
+        sessionId,
+        providerId,
+        items: directItems.map((i) => ({
+          productId: i.productId,
+          name: i.name,
+          imageUrl: i.imageUrl,
+          price: i.price,
+          quantity: i.quantity,
+        })),
+        total,
+        status: "pending",
+      });
+
+      return res.json({ success: true, order });
+    }
+
+    // 🟢 CASE 2: NORMAL CART CHECKOUT
     const cart = await Cart.findOne(userId ? { userId } : { sessionId })
       .populate("items.productId");
 
@@ -36,7 +65,6 @@ export const checkout = async (req, res) => {
       0
     );
 
-    // all products come from the same provider
     const providerId = cart.items[0].productId.providerId;
 
     const order = await Order.create({
@@ -48,6 +76,7 @@ export const checkout = async (req, res) => {
       status: "pending",
     });
 
+    // Clear backend cart after order
     await Cart.findOneAndUpdate(
       userId ? { userId } : { sessionId },
       { items: [] }
@@ -59,6 +88,7 @@ export const checkout = async (req, res) => {
     res.status(500).json({ success: false, message: err.message });
   }
 };
+
 
 
 // 🧾 Get all orders for a user
