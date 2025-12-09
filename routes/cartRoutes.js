@@ -10,22 +10,38 @@ import {
 
 const router = express.Router();
 
-// Get cart (user or session)
-router.get("/:userId", getCart);
+// ======================================================
+// GET CART BY USER ID
+// ======================================================
+router.get("/user/:userId", getCart);
 
-// Checkout preview
-router.get("/:userId/preview", checkoutPreview);
+// GET CART BY SESSION ID
+router.get("/session/:sessionId", getCart);
 
-// Add item to cart
+// ======================================================
+// CHECKOUT PREVIEW (only works for logged-in users)
+// ======================================================
+router.get("/user/:userId/preview", checkoutPreview);
+
+// ======================================================
+// ADD ITEM TO CART (user or session)
+// ======================================================
 router.post("/", addToCart);
 
-// Merge guest cart into user cart
+// ======================================================
+// MERGE CARTS (guest → user)
+// ======================================================
 router.post("/merge", mergeCarts);
 
-// Update quantity
+// ======================================================
+// UPDATE QUANTITY (user or session)
+// ======================================================
 router.put("/qty", updateCartQty);
 
-// Clear cart
-router.delete("/:userId", clearCart);
+// ======================================================
+// CLEAR CART (by user or session)
+// ======================================================
+router.delete("/user/:userId", clearCart);
+router.delete("/session/:sessionId", clearCart);
 
 export default router;
