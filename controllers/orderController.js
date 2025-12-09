@@ -1,11 +1,11 @@
-
 // controllers/orderController.js
 import Cart from "../models/Cart.js";
 import Order from "../models/Order.js";
 import Product from "../models/Product.js";
 
-// 🧾 Checkout -> Create Order from Cart
-// 🧾 Create PICKUP Order
+/* -----------------------------------------------------------------------------
+   🧾 1) CHECKOUT — Create Order from Cart OR Direct Items
+----------------------------------------------------------------------------- */
 export const checkout = async (req, res) => {
   try {
     const { sessionId, userId, directItems } = req.body;
@@ -15,14 +15,13 @@ export const checkout = async (req, res) => {
         .status(400)
         .json({ success: false, message: "Missing identifiers" });
 
-    // 🟡 CASE 1: DIRECT PRODUCT CHECKOUT
+    // 🔥 CASE 1 — Direct Buy (Voucher or Product)
     if (directItems && Array.isArray(directItems) && directItems.length > 0) {
       const total = directItems.reduce(
         (sum, i) => sum + i.price * i.quantity,
         0
       );
 
-      // direct product always contains providerId passed from frontend
       const providerId = directItems[0].providerId;
 
       const order = await Order.create({
@@ -43,9 +42,10 @@ export const checkout = async (req, res) => {
       return res.json({ success: true, order });
     }
 
-    // 🟢 CASE 2: NORMAL CART CHECKOUT
-    const cart = await Cart.findOne(userId ? { userId } : { sessionId })
-      .populate("items.productId");
+    // 🔥 CASE 2 — Normal Cart Checkout
+    const cart = await Cart.findOne(userId ? { userId } : { sessionId }).populate(
+      "items.productId"
+    );
 
     if (!cart || cart.items.length === 0)
       return res
@@ -60,10 +60,7 @@ export const checkout = async (req, res) => {
       quantity: i.quantity,
     }));
 
-    const total = items.reduce(
-      (sum, i) => sum + i.price * i.quantity,
-      0
-    );
+    const total = items.reduce((sum, i) => sum + i.price * i.quantity, 0);
 
     const providerId = cart.items[0].productId.providerId;
 
@@ -76,11 +73,10 @@ export const checkout = async (req, res) => {
       status: "pending",
     });
 
-    // Clear backend cart after order
-    await Cart.findOneAndUpdate(
-      userId ? { userId } : { sessionId },
-      { items: [] }
-    );
+    // Clear cart after creating order
+    await Cart.findOneAndUpdate(userId ? { userId } : { sessionId }, {
+      items: [],
+    });
 
     res.json({ success: true, order });
   } catch (err) {
@@ -89,9 +85,9 @@ export const checkout = async (req, res) => {
   }
 };
 
-
-
-// 🧾 Get all orders for a user
+/* -----------------------------------------------------------------------------
+   2) USER — Get All Orders
+----------------------------------------------------------------------------- */
 export const getOrders = async (req, res) => {
   try {
     const { userId } = req.params;
@@ -102,17 +98,76 @@ export const getOrders = async (req, res) => {
   }
 };
 
-// 🆕 For admin or user: get specific order details
-export const getOrderById = async (req, res) => {
+/* -----------------------------------------------------------------------------
+   3) USER — Get Orders by Status (pending/completed/cancelled/all)
+----------------------------------------------------------------------------- */
+export const getUserOrdersByStatus = async (req, res) => {
   try {
-    const order = await Order.findById(req.params.id).populate("items.productId");
-    if (!order) return res.status(404).json({ success: false, message: "Order not found" });
+    const { userId, status } = req.params;
+
+    const query = { userId };
+    if (status !== "all") query.status = status;
+
+    const orders = await Order.find(query).sort({ createdAt: -1 });
+
+    res.json({ success: true, orders });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+/* -----------------------------------------------------------------------------
+   4) USER — Cancel Order
+----------------------------------------------------------------------------- */
+export const userCancelOrder = async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const { userId } = req.body;
+
+    const order = await Order.findById(orderId);
+    if (!order)
+      return res.status(404).json({ success: false, message: "Order not found" });
+
+    if (order.userId?.toString() !== userId)
+      return res.status(403).json({ success: false, message: "Not authorized" });
+
+    if (order.status !== "pending")
+      return res.status(400).json({
+        success: false,
+        message: "Order can no longer be cancelled",
+      });
+
+    order.status = "cancelled";
+    order.cancelReason = "Cancelled by user";
+
+    await order.save();
+
     res.json({ success: true, order });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
 };
-// 🧾 Provider: Get all orders for this provider
+
+/* -----------------------------------------------------------------------------
+   5) ORDER DETAILS — Get One Order with Product Info
+----------------------------------------------------------------------------- */
+export const getOrderById = async (req, res) => {
+  try {
+    const order = await Order.findById(req.params.id).populate(
+      "items.productId"
+    );
+    if (!order)
+      return res.status(404).json({ success: false, message: "Order not found" });
+
+    res.json({ success: true, order });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+/* -----------------------------------------------------------------------------
+   6) PROVIDER — Get Orders for Provider
+----------------------------------------------------------------------------- */
 export const getProviderOrders = async (req, res) => {
   try {
     const { providerId } = req.params;
@@ -121,7 +176,6 @@ export const getProviderOrders = async (req, res) => {
       .sort({ createdAt: -1 })
       .populate("items.productId");
 
-    // Auto mark expired
     const now = new Date();
     for (const order of orders) {
       if (order.status === "pending" && order.expiresAt < now) {
@@ -136,9 +190,9 @@ export const getProviderOrders = async (req, res) => {
   }
 };
 
-
-
-// 🆕 Provider updates status
+/* -----------------------------------------------------------------------------
+   7) PROVIDER — Update Order Status
+----------------------------------------------------------------------------- */
 export const updateOrderStatus = async (req, res) => {
   try {
     const { orderId } = req.params;
@@ -146,9 +200,7 @@ export const updateOrderStatus = async (req, res) => {
 
     const order = await Order.findById(orderId);
     if (!order)
-      return res
-        .status(404)
-        .json({ success: false, message: "Order not found" });
+      return res.status(404).json({ success: false, message: "Order not found" });
 
     if (order.status !== "pending")
       return res.status(400).json({
@@ -168,6 +220,100 @@ export const updateOrderStatus = async (req, res) => {
     await order.save();
 
     res.json({ success: true, order });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+/* -----------------------------------------------------------------------------
+   8) PROVIDER — Ignore Order
+----------------------------------------------------------------------------- */
+export const providerIgnoreOrder = async (req, res) => {
+  try {
+    const { orderId } = req.params;
+
+    const order = await Order.findById(orderId);
+    if (!order)
+      return res.status(404).json({ success: false, message: "Order not found" });
+
+    if (order.status !== "pending")
+      return res.status(400).json({
+        success: false,
+        message: "Only pending orders can be ignored",
+      });
+
+    order.status = "ignored";
+    await order.save();
+
+    res.json({ success: true, order });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+/* -----------------------------------------------------------------------------
+   9) PROVIDER — Mark Order Completed
+----------------------------------------------------------------------------- */
+export const completeOrder = async (req, res) => {
+  try {
+    const { orderId } = req.params;
+
+    const order = await Order.findById(orderId);
+    if (!order)
+      return res.status(404).json({ success: false, message: "Order not found" });
+
+    if (order.status !== "confirmed")
+      return res.status(400).json({
+        success: false,
+        message: "Only confirmed orders can be completed",
+      });
+
+    order.status = "completed";
+    order.completedAt = new Date();
+
+    await order.save();
+
+    res.json({ success: true, order });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+/* -----------------------------------------------------------------------------
+   10) PROVIDER — Stats Dashboard
+----------------------------------------------------------------------------- */
+export const providerStats = async (req, res) => {
+  try {
+    const { providerId } = req.params;
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const stats = {
+      totalOrders: await Order.countDocuments({ providerId }),
+      pending: await Order.countDocuments({ providerId, status: "pending" }),
+      confirmed: await Order.countDocuments({
+        providerId,
+        status: "confirmed",
+      }),
+      cancelled: await Order.countDocuments({
+        providerId,
+        status: "cancelled",
+      }),
+      completed: await Order.countDocuments({
+        providerId,
+        status: "completed",
+      }),
+      revenueToday: (
+        await Order.find({
+          providerId,
+          status: "completed",
+          createdAt: { $gte: today },
+        })
+      ).reduce((sum, o) => sum + o.total, 0),
+    };
+
+    res.json({ success: true, stats });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
