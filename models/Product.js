@@ -6,8 +6,7 @@ const productSchema = new mongoose.Schema({
   oldPrice: { type: Number, required: true },
   newPrice: { type: Number, required: true },
   category: { type: String, default: "" },      // 🔹 Added
-  subcategory: { type: String, default: "" },   // 🔹 Added
-  area: { type: String, default: "Cairo" },  
+  area: { type: String, default: "Riyad" },  
   providerId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Provider",
