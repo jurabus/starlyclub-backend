@@ -2,18 +2,26 @@ import express from "express";
 import {
   checkout,
   getOrders,
-  getOrderById
+  getOrderById,
+  getProviderOrders,
+  updateOrderStatus
 } from "../controllers/orderController.js";
 
 const router = express.Router();
 
-// 🧾 Create order from cart
+// User checkout (pickup order)
 router.post("/checkout", checkout);
 
-// 📦 Get all orders for a user
+// User orders
 router.get("/user/:userId", getOrders);
 
-// 🔍 Get single order by id
+// Provider orders
+router.get("/provider/:providerId", getProviderOrders);
+
+// Provider updates order status
+router.patch("/:orderId/status", updateOrderStatus);
+
+// Single order
 router.get("/:id", getOrderById);
 
 export default router;

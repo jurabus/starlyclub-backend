@@ -18,22 +18,40 @@ const orderSchema = new mongoose.Schema(
     userId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Customer",
-      required: false, // allow guest checkouts
+      required: false,
     },
-    sessionId: {
-      type: String,
-      required: false, // for guest carts
+
+    sessionId: { type: String },
+
+    providerId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Provider",
+      required: true,
     },
+
     items: [orderItemSchema],
+
     total: Number,
+
     status: {
       type: String,
-      enum: ["pending", "paid", "shipped", "delivered", "cancelled"],
+      enum: ["pending", "confirmed", "cancelled", "ignored"],
       default: "pending",
     },
-    createdAt: { type: Date, default: Date.now },
+
+    cancelReason: { type: String, default: "" },
+
+    expiresAt: { type: Date }, // auto created
   },
   { timestamps: true }
 );
+
+// AUTO-SET EXPIRY DATE = 5 minutes after creation
+orderSchema.pre("save", function (next) {
+  if (!this.expiresAt) {
+    this.expiresAt = new Date(Date.now() + 5 * 60 * 1000);
+  }
+  next();
+});
 
 export default mongoose.model("Order", orderSchema);
