@@ -20,6 +20,7 @@ import membershipRoutes from "./routes/membershipRoutes.js";
 import domainRoutes from "./routes/domainRoutes.js";
 import voucherQrRoutes from "./routes/voucherQrRoutes.js";
 import offerRoutes from "./routes/offerRoutes.js";
+import bannerRoutes from "./routes/bannerRoutes.js";
 
 
 dotenv.config();
@@ -52,6 +53,8 @@ app.enable("trust proxy")
 // API routes
 
 app.use("/api/domains", domainRoutes);
+app.use("/api/banners", bannerRoutes);
+
 app.use("/api/qr/voucher", voucherQrRoutes);
 app.use("/api/offers", offerRoutes);
 app.use("/api/vouchers", voucherRoutes);
