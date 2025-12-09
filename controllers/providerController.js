@@ -37,9 +37,12 @@ export const getProviders = async (req, res) => {
     const { area, category, subcategory } = req.query;
     const filter = {};
 
-    if (area) filter.area = new RegExp(area, "i");
+    if (area && area !== "All") {
+  filter.area = new RegExp(`^${area}$`, "i");
+
+}
+
     if (category) filter.category = new RegExp(category, "i");
-    if (subcategory) filter.subcategory = new RegExp(subcategory, "i");
 
     const providers = await Provider.find(filter).sort({ createdAt: -1 });
 
