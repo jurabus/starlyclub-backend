@@ -57,7 +57,7 @@ app.use("/api/offers", offerRoutes);
 app.use("/api/vouchers", voucherRoutes);
 app.use("/api/memberships", membershipRoutes);
 app.use("/api/providers", providerRoutes);
-app.use("/api/provider/auth", providerAuthRoutes);
+app.use("/api/provider-auth", providerAuthRoutes);
 app.use("/api/products", productRoutes);
 app.use("/api/orders", orderRoutes);
 app.use("/api/cart", cartRoutes);

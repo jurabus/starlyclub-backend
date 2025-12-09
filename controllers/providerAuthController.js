@@ -2,6 +2,84 @@
 import Provider from "../models/Provider.js";
 import jwt from "jsonwebtoken";
 
+export const signupProvider = async (req, res) => {
+  try {
+    const {
+      name,
+      username,
+      accessKey,
+      logoUrl,
+      description,
+      category,
+      subcategory,
+      area,
+      voucherDiscountPercent,
+      minimumVoucherAmount,
+      maximumDiscount,
+      featured,
+    } = req.body;
+
+    // ========================================
+    // 🔹 Validate required fields
+    // ========================================
+    if (!name || !username || !accessKey) {
+      return res.status(400).json({
+        success: false,
+        message: "Missing required fields: name, username, accessKey",
+      });
+    }
+
+    // ========================================
+    // 🔹 Ensure username is unique
+    // ========================================
+    const exists = await Provider.findOne({ username });
+    if (exists) {
+      return res.status(400).json({
+        success: false,
+        message: "Username already exists",
+      });
+    }
+
+    // ========================================
+    // 🔹 Create Provider exactly matching schema
+    // ========================================
+    const provider = await Provider.create({
+      name,
+      username,
+      accessKey,
+
+      // optional fields:
+      logoUrl: logoUrl || "",
+      description: description || "",
+      category: category || "",
+      subcategory: subcategory || "",
+      area: area || "Cairo",
+
+      voucherDiscountPercent: voucherDiscountPercent ?? 0,
+      minimumVoucherAmount: minimumVoucherAmount ?? 0,
+      maximumDiscount: maximumDiscount ?? 0,
+      featured: featured ?? false,
+
+      // scan fields automatically default
+    });
+
+    res.status(201).json({
+      success: true,
+      message: "Provider registered successfully",
+      provider,
+    });
+
+  } catch (err) {
+    console.error("❌ Provider signup error:", err);
+    res.status(500).json({
+      success: false,
+      message: "Server error during provider signup",
+    });
+  }
+};
+
+
+//
 export const loginProvider = async (req, res) => {
   try {
     const { username, accessKey } = req.body;
