@@ -168,14 +168,29 @@ export const getOrderById = async (req, res) => {
 /* -----------------------------------------------------------------------------
    6) PROVIDER — Get Orders for Provider
 ----------------------------------------------------------------------------- */
+/* -----------------------------------------------------------------------------  
+   PROVIDER — Paginated Orders + Pending First  
+----------------------------------------------------------------------------- */
+// 6) PROVIDER — Get Orders for Provider (Paginated + Priority Sorting)
 export const getProviderOrders = async (req, res) => {
   try {
     const { providerId } = req.params;
+    const { page = 1, limit = 20, status = "all" } = req.query;
 
-    const orders = await Order.find({ providerId })
+    const skip = (page - 1) * limit;
+
+    // Status filter
+    const query = { providerId };
+    if (status !== "all") query.status = status;
+
+    // Fetch
+    let orders = await Order.find(query)
+      .populate("items.productId")
       .sort({ createdAt: -1 })
-      .populate("items.productId");
+      .skip(skip)
+      .limit(Number(limit));
 
+    // Auto-expire
     const now = new Date();
     for (const order of orders) {
       if (order.status === "pending" && order.expiresAt < now) {
@@ -184,11 +199,41 @@ export const getProviderOrders = async (req, res) => {
       }
     }
 
-    res.json({ success: true, orders });
+    // ⭐ PRIORITY SORTING
+    const priority = {
+      pending: 1,
+      confirmed: 2,
+      completed: 3,
+      cancelled: 4,
+      ignored: 5,
+    };
+
+    orders = orders.sort(
+      (a, b) =>
+        priority[a.status] - priority[b.status] ||
+        new Date(b.createdAt) - new Date(a.createdAt)
+    );
+
+    // Total count for pagination
+    const totalOrders = await Order.countDocuments(query);
+    const hasMore = page * limit < totalOrders;
+
+    res.json({
+      success: true,
+      orders,
+      pagination: {
+        total: totalOrders,
+        page: Number(page),
+        limit: Number(limit),
+        hasMore,
+      },
+    });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
 };
+
+
 
 /* -----------------------------------------------------------------------------
    7) PROVIDER — Update Order Status
