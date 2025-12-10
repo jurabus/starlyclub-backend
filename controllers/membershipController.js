@@ -279,6 +279,7 @@ export const getUserCard = async (req, res) => {
       card: {
         userName: user.name || user.email,
         membershipType: membership.planId?.name,
+		planId: membership.planId?._id,   
         planImage: membership.planId?.imageUrl || "",
         startDate: membership.startDate,
         endDate: membership.endDate,
