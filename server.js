@@ -23,6 +23,9 @@ import offerRoutes from "./routes/offerRoutes.js";
 import bannerRoutes from "./routes/bannerRoutes.js";
 import webhookRoutes from "./routes/webhookRoutes.js";
 import "./cron/payoutCron.js";
+import adminRoutes from "./routes/adminRoutes.js";
+
+
 
 
 dotenv.config();
@@ -57,6 +60,7 @@ app.enable("trust proxy")
 app.use("/api/domains", domainRoutes);
 app.use("/api/banners", bannerRoutes);
 app.use("/api/payments", paymentRoutes);
+app.use("/api/admin", adminRoutes);
 app.use("/api/webhooks", webhookRoutes);
 app.use("/api/qr/voucher", voucherQrRoutes);
 app.use("/api/offers", offerRoutes);
