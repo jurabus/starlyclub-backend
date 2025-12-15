@@ -4,7 +4,7 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import Voucher from "../models/Voucher.js";
-
+import ProviderEarning from "../models/ProviderEarning.js";
 // === 1️⃣ Configure local uploads ===
 const uploadDir = "uploads";
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir);
@@ -172,4 +172,88 @@ export const getProviderById = async (req, res) => {
     console.error("❌ getProviderById error:", err);
     res.status(500).json({ success: false, message: err.message });
   }
+};
+
+export const startTapOnboarding = async (req, res) => {
+  try {
+    const { providerId } = req.body;
+
+    const provider = await Provider.findById(providerId);
+    if (!provider)
+      return res.status(404).json({ success: false, message: "Provider not found" });
+
+    // 🔗 Tap hosted onboarding (KSA marketplace)
+    const onboardingUrl = `https://starlyclub-backend.onrender.com/api/payments/tap/onboard?providerId=${provider._id}`;
+
+    provider.tapOnboardingStatus = "pending";
+    await provider.save();
+
+    res.json({
+      success: true,
+      onboardingUrl,
+    });
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+export const startTabbyOnboarding = async (req, res) => {
+  try {
+    const { providerId } = req.body;
+
+    const provider = await Provider.findById(providerId);
+    if (!provider)
+      return res.status(404).json({ success: false, message: "Provider not found" });
+
+    provider.tabbyOnboardingStatus = "pending";
+    await provider.save();
+
+    const onboardingUrl =
+      `https://starlyclub-backend.onrender.com/api/payments/tabby/onboard?providerId=${provider._id}`;
+
+    res.json({ success: true, onboardingUrl });
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+export const startTamaraOnboarding = async (req, res) => {
+  try {
+    const { providerId } = req.body;
+
+    const provider = await Provider.findById(providerId);
+    if (!provider)
+      return res.status(404).json({ success: false, message: "Provider not found" });
+
+    provider.tamaraOnboardingStatus = "pending";
+    await provider.save();
+
+    const onboardingUrl =
+      `https://starlyclub-backend.onrender.com/api/payments/tamara/onboard?providerId=${provider._id}`;
+
+    res.json({ success: true, onboardingUrl });
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+
+export const getProviderEarnings = async (req, res) => {
+  const { providerId } = req.params;
+
+  const earnings = await ProviderEarning.find({ providerId }).sort({
+    createdAt: -1,
+  });
+
+  const summary = earnings.reduce(
+    (acc, e) => {
+      acc.total += e.amount;
+      if (e.status === "paid") acc.paid += e.amount;
+      else acc.pending += e.amount;
+      return acc;
+    },
+    { total: 0, paid: 0, pending: 0 }
+  );
+
+  res.json({ success: true, earnings, summary });
 };

@@ -14,6 +14,34 @@ const providerSchema = new mongoose.Schema({
   accessKey: { type: String, required: true },
 
   // Existing membership / scan-related fields
+  // 🔹 PAYMENT (Tap Sub-Merchant)
+tapPayoutEnabled: { type: Boolean, default: false },
+// 🔐 Payment onboarding (Tap sub-merchant)
+tapSubMerchantId: {
+  type: String,
+  default: "",
+},
+
+tapOnboardingStatus: {
+  type: String,
+  enum: ["not_started", "pending", "verified"],
+  default: "not_started",
+},
+// 🔐 Tamara onboarding
+tamaraMerchantId: {
+  type: String,
+  default: "",
+},
+
+tamaraOnboardingStatus: {
+  type: String,
+  enum: ["not_started", "pending", "verified"],
+  default: "not_started",
+},
+
+// Optional (for admin dashboard)
+iban: { type: String, default: "" },
+bankName: { type: String, default: "" },
   maximumDiscount: { type: Number, default: 0, min: 0, max: 100 }, // provider's max discount %
   scannedCardsCount: { type: Number, default: 0 },                  // total successful membership scans
   scanHistory: [

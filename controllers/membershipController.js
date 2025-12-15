@@ -4,21 +4,38 @@ import MembershipPlan from "../models/MembershipPlan.js";
 import UserMembership from "../models/UserMembership.js";
 import Customer from "../models/Customer.js";
 import Provider from "../models/Provider.js";
+import MembershipPayment from "../models/MembershipPayment.js";
+
+
+const DAYS_PER_MONTH = 28;
+const YEARLY_DISCOUNT = 0.4; // 40%
 
 /* -------------------- Admin: Plans CRUD -------------------- */
 
 export const createPlan = async (req, res) => {
   try {
-    const { name, imageUrl, fraction, isActive } = req.body;
+    const { name, imageUrl, fraction, monthlyPrice, isActive } = req.body;
+
     if (fraction == null || fraction < 0 || fraction > 1)
       return res.status(400).json({ success: false, message: "fraction must be between 0 and 1" });
 
-    const plan = await MembershipPlan.create({ name, imageUrl, fraction, isActive });
+    if (monthlyPrice == null || monthlyPrice <= 0)
+      return res.status(400).json({ success: false, message: "monthlyPrice must be > 0" });
+
+    const plan = await MembershipPlan.create({
+      name,
+      imageUrl,
+      fraction,
+      monthlyPrice,
+      isActive,
+    });
+
     res.status(201).json({ success: true, plan });
   } catch (e) {
     res.status(400).json({ success: false, message: e.message });
   }
 };
+
 
 // controllers/membershipController.js  ✅ Update listPlans
 export const listPlans = async (_req, res) => {
@@ -56,16 +73,16 @@ export const renewMembership = async (req, res) => {
     // 💸 monthly price = fraction * 100 SR (example)
     const monthlyPrice = Math.round(plan.fraction * 100);
 
-    if (user.walletBalance < monthlyPrice) {
-      return res.status(400).json({
-        success: false,
-        message: "Insufficient wallet balance",
-      });
-    }
+    //if (user.walletBalance < monthlyPrice) {
+   //   return res.status(400).json({
+     //   success: false,
+      //  message: "Insufficient wallet balance",
+    //  });
+   // }
 
     // Deduct wallet
-    user.walletBalance -= monthlyPrice;
-    await user.save();
+   // user.walletBalance -= monthlyPrice;
+   // await user.save();
 
     // Extend membership 1 month
     const newEndDate = new Date(membership.endDate);
@@ -100,21 +117,28 @@ export const getPlan = async (req, res) => {
 
 export const updatePlan = async (req, res) => {
   try {
-    const { name, imageUrl, fraction, isActive } = req.body;
+    const { name, imageUrl, fraction, monthlyPrice, isActive } = req.body;
+
     if (fraction != null && (fraction < 0 || fraction > 1))
       return res.status(400).json({ success: false, message: "fraction must be between 0 and 1" });
 
+    if (monthlyPrice != null && monthlyPrice <= 0)
+      return res.status(400).json({ success: false, message: "monthlyPrice must be > 0" });
+
     const plan = await MembershipPlan.findByIdAndUpdate(
       req.params.id,
-      { name, imageUrl, fraction, isActive },
+      { name, imageUrl, fraction, monthlyPrice, isActive },
       { new: true }
     );
+
     if (!plan) return res.status(404).json({ success: false, message: "Plan not found" });
+
     res.json({ success: true, plan });
   } catch (e) {
     res.status(400).json({ success: false, message: e.message });
   }
 };
+
 
 export const deletePlan = async (req, res) => {
   try {
@@ -171,15 +195,15 @@ export const assignMembership = async (req, res) => {
     /* ---------------------------------------------------
      🔥 Deduct from wallet
      ---------------------------------------------------*/
-    if (user.walletBalance < chargeAmount) {
-      return res.status(400).json({
-        success: false,
-        message: "Insufficient wallet balance",
-      });
-    }
+   // if (user.walletBalance < chargeAmount) {
+   //   return res.status(400).json({
+    //    success: false,
+   //     message: "Insufficient wallet balance",
+  //    });
+  //  }
 
-    user.walletBalance -= chargeAmount;
-    await user.save();
+  //  user.walletBalance -= chargeAmount;
+  //  await user.save();
 
     /* ---------------------------------------------------
      🔄 Calculate new membership start/end
@@ -391,3 +415,79 @@ export const scanMembership = async (req, res) => {
     res.status(500).json({ success: false, message: e.message });
   }
 };
+
+export const createMembershipPayment = async (req, res) => {
+  try {
+    const { userId, planId, gateway, cycle } = req.body;
+
+    if (!["monthly", "yearly"].includes(cycle)) {
+      return res.status(400).json({ success: false, message: "Invalid cycle" });
+    }
+
+    const plan = await MembershipPlan.findById(planId);
+    if (!plan)
+      return res.status(404).json({ success: false, message: "Plan not found" });
+
+    const months = cycle === "monthly" ? 1 : 12;
+    const days = months * 28;
+
+    let amount = plan.monthlyPrice * months;
+
+    if (cycle === "yearly") {
+      amount = Math.round(amount * 0.6); // 🔥 40% OFF
+    }
+
+    const intent = await MembershipPayment.create({
+      userId,
+      planId,
+      gateway,
+      amount,
+      cycle,
+      days,
+      status: "pending",
+    });
+
+    const paymentUrl = `https://starlyclub-backend.onrender.com/api/payments/${gateway}/create?membershipPaymentId=${intent._id}`;
+
+    res.json({ success: true, paymentUrl });
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+
+
+
+export const finalizeMembershipPayment = async (paymentIntent) => {
+  const intent = await MembershipPayment.findById(
+    paymentIntent.metadata.membershipPaymentId
+  );
+
+  if (!intent || intent.status === "paid") return;
+
+  intent.status = "paid";
+  intent.paidAt = new Date();
+  await intent.save();
+
+  const { userId, planId, days } = intent;
+
+  const existing = await UserMembership.findOne({ userId });
+
+  const start = existing ? existing.startDate : new Date();
+  const end = existing ? new Date(existing.endDate) : new Date();
+
+  end.setDate(end.getDate() + days);
+
+  await UserMembership.findOneAndUpdate(
+    { userId },
+    {
+      userId,
+      planId,
+      startDate: start,
+      endDate: end,
+      isActive: true,
+    },
+    { upsert: true }
+  );
+};
+

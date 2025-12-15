@@ -9,13 +9,16 @@ import {
   assignMembership,
   getUserCard,
   scanMembership,
-  renewMembership
+  renewMembership,
+  createMembershipPayment
 } from "../controllers/membershipController.js";
 
 const router = express.Router();
 
 /* ---------- Admin: Plans ---------- */
 router.post("/plans", createPlan);        // create plan
+router.post("/payment", createMembershipPayment);
+
 router.post("/renew", renewMembership);
 router.get("/plans", listPlans);          // list plans
 router.get("/plans/:id", getPlan);        // get one plan

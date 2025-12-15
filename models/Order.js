@@ -32,6 +32,18 @@ const orderSchema = new mongoose.Schema(
     items: [orderItemSchema],
 
     total: Number,
+	payment: {
+  gateway: String,
+  paymentIntentId: {
+    type: mongoose.Schema.Types.ObjectId,
+    index: true,
+    unique: true,
+  },
+  paidAt: Date,
+},
+
+
+
 
     status: {
       type: String,

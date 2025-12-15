@@ -12,7 +12,7 @@ import customerRoutes from "./routes/customerRoutes.js";
 import productRoutes from "./routes/productRoutes.js";
 import orderRoutes from "./routes/orderRoutes.js";
 import cartRoutes from "./routes/cartRoutes.js";
-
+import paymentRoutes from "./routes/paymentRoutes.js";
 import categoryRoutes from "./routes/categoryRoutes.js";
 import providerAuthRoutes from "./routes/providerAuthRoutes.js";
 import voucherRoutes from "./routes/voucherRoutes.js";
@@ -21,6 +21,8 @@ import domainRoutes from "./routes/domainRoutes.js";
 import voucherQrRoutes from "./routes/voucherQrRoutes.js";
 import offerRoutes from "./routes/offerRoutes.js";
 import bannerRoutes from "./routes/bannerRoutes.js";
+import webhookRoutes from "./routes/webhookRoutes.js";
+import "./cron/payoutCron.js";
 
 
 dotenv.config();
@@ -54,7 +56,8 @@ app.enable("trust proxy")
 
 app.use("/api/domains", domainRoutes);
 app.use("/api/banners", bannerRoutes);
-
+app.use("/api/payments", paymentRoutes);
+app.use("/api/webhooks", webhookRoutes);
 app.use("/api/qr/voucher", voucherQrRoutes);
 app.use("/api/offers", offerRoutes);
 app.use("/api/vouchers", voucherRoutes);
