@@ -1,17 +1,12 @@
 import Provider from "../models/Provider.js";
 import ProviderEarning from "../models/ProviderEarning.js";
+import PayoutLog from "../models/PayoutLog.js";
 import mongoose from "mongoose";
 
-const MIN_PAYOUT_AMOUNT = 50; // SR safety threshold
+const MIN_PAYOUT_AMOUNT = 50;
 
-/**
- * Auto payout providers
- * - Tabby / Tamara ready
- * - Idempotent
- * - Admin-loggable
- */
 export const runAutoPayouts = async () => {
-  console.log("🔄 Scanning providers for payouts...");
+  console.log("🔄 Running auto payouts...");
 
   const providers = await Provider.find({
     $or: [
@@ -25,12 +20,8 @@ export const runAutoPayouts = async () => {
     session.startTransaction();
 
     try {
-      // 🔒 Lock only unpaid earnings
       const earnings = await ProviderEarning.find(
-        {
-          providerId: provider._id,
-          status: "pending",
-        },
+        { providerId: provider._id, status: "pending" },
         null,
         { session }
       );
@@ -45,74 +36,67 @@ export const runAutoPayouts = async () => {
         0
       );
 
-      // ⛔ Minimum payout protection
       if (totalAmount < MIN_PAYOUT_AMOUNT) {
         await session.endSession();
         continue;
       }
 
-      console.log(
-        `💸 Paying provider "${provider.name}" → SR ${totalAmount}`
-      );
+      const gateway =
+        provider.tabbyOnboardingStatus === "verified"
+          ? "tabby"
+          : "tamara";
 
-      /**
-       * 🚀 PAYOUT EXECUTION (future-ready)
-       * Replace this block with:
-       * - Bank API
-       * - Tap / Stripe / Wise / Payoneer
-       */
-      const payoutResult = {
-        success: true,
-        reference: `AUTO-${Date.now()}`,
-        gateway:
-          provider.tabbyOnboardingStatus === "verified"
-            ? "tabby"
-            : "tamara",
-      };
+      const reference = `AUTO-${Date.now()}`;
 
-      if (!payoutResult.success) {
-        throw new Error("Payout gateway failed");
-      }
-
-      // ✅ Mark earnings as paid
+      // ✅ Mark earnings paid
       await ProviderEarning.updateMany(
-        { _id: { $in: earnings.map((e) => e._id) } },
+        { _id: { $in: earnings.map(e => e._id) } },
         {
           status: "paid",
           paidAt: new Date(),
-          payoutRef: payoutResult.reference,
+          payoutRef: reference,
         },
         { session }
       );
 
-      // 🧾 Admin payout log (stored on provider)
-      provider.payoutHistory = provider.payoutHistory || [];
-      provider.payoutHistory.push({
-        amount: totalAmount,
-        paidAt: new Date(),
-        gateway: payoutResult.gateway,
-        reference: payoutResult.reference,
-        earningsCount: earnings.length,
-      });
-
-      await provider.save({ session });
+      // 🧾 GLOBAL ADMIN LOG
+      await PayoutLog.create(
+        [
+          {
+            providerId: provider._id,
+            providerName: provider.name,
+            amount: totalAmount,
+            gateway,
+            status: "paid",
+            earningsCount: earnings.length,
+            periodStart: earnings[0].createdAt,
+            periodEnd: earnings[earnings.length - 1].createdAt,
+            reference,
+          },
+        ],
+        { session }
+      );
 
       await session.commitTransaction();
       session.endSession();
 
-      console.log(
-        `✅ Provider "${provider.name}" paid successfully`
-      );
+      console.log(`✅ Paid ${provider.name} → SR ${totalAmount}`);
     } catch (err) {
       await session.abortTransaction();
       session.endSession();
 
-      console.error(
-        `❌ Payout failed for provider "${provider.name}":`,
-        err.message
-      );
+      await PayoutLog.create({
+        providerId: provider._id,
+        providerName: provider.name,
+        amount: 0,
+        gateway: "manual",
+        status: "failed",
+        errorMessage: err.message,
+      });
+
+      console.error(`❌ Payout failed for ${provider.name}`, err);
     }
   }
 
-  console.log("🏁 Auto payout scan completed");
+  console.log("🏁 Auto payout completed");
 };

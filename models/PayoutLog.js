@@ -6,39 +6,38 @@ const payoutLogSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "Provider",
       required: true,
+      index: true,
     },
 
-    providerName: String,
+    providerName: {
+      type: String,
+      required: true,
+    },
 
     amount: {
       type: Number,
       required: true,
     },
 
-    currency: {
+    gateway: {
       type: String,
-      default: "SR",
+      enum: ["tabby", "tamara", "manual"],
+      required: true,
+    },
+
+    status: {
+      type: String,
+      enum: ["paid", "failed"],
+      required: true,
     },
 
     periodStart: Date,
     periodEnd: Date,
 
-    status: {
-      type: String,
-      enum: ["pending", "paid", "failed"],
-      default: "pending",
-    },
-
-    gateway: {
-      type: String,
-      enum: ["tap", "bank"],
-      default: "tap",
-    },
+    earningsCount: Number,
 
     reference: String,
     errorMessage: String,
-
-    paidAt: Date,
   },
   { timestamps: true }
 );
