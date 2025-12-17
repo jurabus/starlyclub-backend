@@ -418,42 +418,46 @@ export const scanMembership = async (req, res) => {
 
 export const createMembershipPayment = async (req, res) => {
   try {
-    const { userId, planId, gateway, cycle } = req.body;
+    const { userId, planId, cycle, gateway } = req.body;
 
     if (!["monthly", "yearly"].includes(cycle)) {
-      return res.status(400).json({ success: false, message: "Invalid cycle" });
+      return res.status(400).json({ message: "Invalid cycle" });
     }
 
     const plan = await MembershipPlan.findById(planId);
-    if (!plan)
-      return res.status(404).json({ success: false, message: "Plan not found" });
+    if (!plan) {
+      return res.status(404).json({ message: "Membership plan not found" });
+    }
 
-    const months = cycle === "monthly" ? 1 : 12;
-    const days = months * 28;
-
+    const months = cycle === "yearly" ? 12 : 1;
     let amount = plan.monthlyPrice * months;
 
     if (cycle === "yearly") {
-      amount = Math.round(amount * 0.6); // 🔥 40% OFF
+      amount = Math.round(amount * 0.6); // 40% OFF
     }
 
-    const intent = await MembershipPayment.create({
-      userId,
-      planId,
-      gateway,
-      amount,
-      cycle,
-      days,
-      status: "pending",
-    });
+    // 🔐 Attach required fields for payment controllers
+    req.body.amount = amount;
+    req.body.type = "membership_purchase";
+    req.body.userId = userId;
 
-    const paymentUrl = `https://starlyclub-backend.onrender.com/api/payments/${gateway}/create?membershipPaymentId=${intent._id}`;
+    if (gateway === "tap") {
+      return createTapPayment(req, res);
+    }
+    if (gateway === "tabby") {
+      return createTabbyPayment(req, res);
+    }
+    if (gateway === "tamara") {
+      return createTamaraPayment(req, res);
+    }
 
-    res.json({ success: true, paymentUrl });
+    return res.status(400).json({ message: "Invalid payment gateway" });
   } catch (e) {
-    res.status(500).json({ success: false, message: e.message });
+    console.error("Membership payment error:", e);
+    res.status(500).json({ message: "Payment initialization failed" });
   }
 };
+
 
 
 

@@ -24,6 +24,8 @@ import bannerRoutes from "./routes/bannerRoutes.js";
 import webhookRoutes from "./routes/webhookRoutes.js";
 import "./cron/payoutCron.js";
 import adminPayoutRoutes from "./routes/adminPayoutRoutes.js";
+import adminWithdrawals from "./routes/adminWithdrawals.js";
+
 
 
 
@@ -37,6 +39,7 @@ const PORT = process.env.PORT || 5000;
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true })); 
+app.enable("trust proxy")
 // ====== MONGO CONNECTION ======
 const connectDB = async () => {
   try {
@@ -55,13 +58,14 @@ connectDB();
 app.get("/", (req, res) => {
   res.send("🚀 StarlyClub Backend Server Running...");
 });
-app.enable("trust proxy")
+
 // API routes
 
 app.use("/api/domains", domainRoutes);
 app.use("/api/banners", bannerRoutes);
 app.use("/api/payments", paymentRoutes);
 app.use("/api/admin", adminPayoutRoutes);
+app.use("/api/admin/withdrawals", adminWithdrawals);
 app.use("/api/webhooks", webhookRoutes);
 app.use("/api/qr/voucher", voucherQrRoutes);
 app.use("/api/offers", offerRoutes);

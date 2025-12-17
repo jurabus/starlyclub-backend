@@ -1,6 +1,6 @@
 import express from "express";
 import Customer from "../models/Customer.js";
-
+import { requestWithdrawal } from "../controllers/walletController.js";
 const router = express.Router();
 
 /**
@@ -30,41 +30,6 @@ router.get("/:userId", async (req, res) => {
  * Request a withdrawal (if balance is sufficient)
  * Body: { userId, amount }
  */
-router.post("/withdraw", async (req, res) => {
-  try {
-    const { userId, amount } = req.body;
-
-    if (!userId || !amount)
-      return res.status(400).json({ success: false, message: "Missing data" });
-    if (amount <= 0)
-      return res
-        .status(400)
-        .json({ success: false, message: "Invalid withdrawal amount" });
-
-    const user = await Customer.findById(userId);
-    if (!user)
-      return res.status(404).json({ success: false, message: "User not found" });
-
-    if (user.walletBalance < amount)
-      return res
-        .status(400)
-        .json({ success: false, message: "Insufficient balance" });
-
-    // Deduct & record
-    user.walletBalance -= amount;
-    user.withdrawalRequests.push({ amount, method: req.body.method, details: req.body.details });
-
-    await user.save();
-
-    res.json({
-      success: true,
-      message: "Withdrawal request submitted successfully",
-      newBalance: user.walletBalance,
-    });
-  } catch (e) {
-    console.error("Wallet withdraw error:", e);
-    res.status(500).json({ success: false, message: "Server error" });
-  }
-});
+router.post("/withdraw", requestWithdrawal);
 
 export default router;

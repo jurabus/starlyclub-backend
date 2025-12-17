@@ -2,6 +2,47 @@ import Voucher from "../models/Voucher.js";
 import Provider from "../models/Provider.js";
 import Customer from "../models/Customer.js";
 import crypto from "crypto";
+import PaymentIntent from "../models/PaymentIntent.js";
+
+export const createVoucherPayment = async (req, res) => {
+  try {
+    const { userId, providerId, amount, gateway } = req.body;
+
+    if (!userId || !providerId || !amount || !gateway) {
+      return res.status(400).json({ message: "Missing data" });
+    }
+
+    const provider = await Provider.findById(providerId);
+    if (!provider)
+      return res.status(404).json({ message: "Provider not found" });
+
+    const disc = provider.voucherDiscountPercent || 0;
+    const price = Math.round(amount - (amount * disc) / 100);
+
+    // 🔐 Attach payment intent metadata
+    req.body.amount = price;
+    req.body.type = "provider_purchase";
+    req.body.userId = userId;
+    req.body.providerId = providerId;
+
+    // 🔗 This tells finalizer to create voucher
+    req.body.voucherPayload = {
+      faceValue: amount,
+      discountPercent: disc,
+      providerName: provider.name,
+      logoUrl: provider.logoUrl || "",
+    };
+
+    if (gateway === "tap") return createTapPayment(req, res);
+    if (gateway === "tabby") return createTabbyPayment(req, res);
+    if (gateway === "tamara") return createTamaraPayment(req, res);
+
+    return res.status(400).json({ message: "Invalid gateway" });
+  } catch (e) {
+    console.error("Voucher payment error:", e);
+    res.status(500).json({ message: "Voucher payment failed" });
+  }
+};
 
 // ===========================================
 // 1) USER CREATES A VOUCHER

@@ -5,12 +5,14 @@ import {
   adminListVouchers,
   issueVoucherQR,
   validateVoucherQR,
+  createVoucherPayment,
 } from "../controllers/voucherController.js";
 
 const router = express.Router();
 
 // User actions
 router.post("/purchase", purchaseVoucher);
+router.post("/payment", createVoucherPayment);
 router.get("/user/list", getUserVouchers);
 
 // Admin action (VIEW ONLY — no editing)

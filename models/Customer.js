@@ -2,16 +2,36 @@
 import mongoose from "mongoose";
 
 const withdrawalSchema = new mongoose.Schema({
+  _id: { type: mongoose.Schema.Types.ObjectId, auto: true },
+
   amount: Number,
-  method: String,
-  details: String,
+
+  method: {
+    type: String,
+    enum: ["manual", "tap"],
+    required: true,
+  },
+
+  tapDestinationId: {
+    type: String,
+    default: null,
+  },
+
   status: {
     type: String,
-    enum: ["pending", "approved", "rejected"],
+    enum: ["pending", "authorized", "processing", "paid", "failed"],
     default: "pending",
   },
+
+  reference: String,
+  errorMessage: String,
+
   requestedAt: { type: Date, default: Date.now },
+  authorizedAt: Date,
+  processedAt: Date,
 });
+
+
 
 const referralRecordSchema = new mongoose.Schema({
   referredUser: { type: mongoose.Schema.Types.ObjectId, ref: "Customer" },
