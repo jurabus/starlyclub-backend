@@ -34,46 +34,42 @@ export const createTapPayment = async (req, res) => {
       userId,
       sessionId,
       membershipPaymentId,
-      voucherPayload,
+      voucherPayload, // <-- explicitly destructure
     } = req.body;
 
-    /* -------------------------------
-       🧪 MOCK MODE
-    -------------------------------- */
     // 🧪 MOCK MODE (Tap not configured)
-if (!isTapConfigured()) {
-  const intent = await PaymentIntent.create({
-    amount,
-    type,
-    gateway: "tap",
-    providerId: providerId || null,
-    userId: userId || null,
-    sessionId: sessionId || null,
-    membershipPaymentId: membershipPaymentId || null,
-    voucherPayload: req.body.voucherPayload || null,
-    status: "pending",
-  });
+    if (!isTapConfigured()) {
+      const intent = await PaymentIntent.create({
+        amount,
+        type,
+        gateway: "tap",
+        providerId: providerId || null,
+        userId: userId || null,
+        sessionId: sessionId || null,
+        membershipPaymentId: membershipPaymentId || null,
 
-  await finalizePaymentOnce(intent);
+        // ✅ ONLY attach if it exists
+        ...(voucherPayload ? { voucherPayload } : {}),
 
-  return res.json({
-    mocked: true,
-    paymentIntentId: intent._id,
-  });
-}
+        status: "pending",
+      });
 
+      // ✅ Finalize (creates ORDER or VOUCHER safely)
+      await finalizePaymentOnce(intent);
 
-    /* -------------------------------
-       🔴 REAL TAP MODE
-    -------------------------------- */
+      return res.json({
+        mocked: true,
+        paymentIntentId: intent._id,
+      });
+    }
+
+    /* ================= REAL TAP MODE ================= */
+
     let provider = null;
-
     if (type === "provider_purchase") {
       provider = await Provider.findById(providerId);
       if (!provider?.tapSubMerchantId) {
-        return res.status(400).json({
-          message: "Provider payout not enabled for Tap",
-        });
+        return res.status(400).json({ message: "Provider payout not enabled" });
       }
     }
 
@@ -85,7 +81,7 @@ if (!isTapConfigured()) {
       userId: userId || null,
       sessionId: sessionId || null,
       membershipPaymentId: membershipPaymentId || null,
-      voucherPayload: voucherPayload || null,
+      ...(voucherPayload ? { voucherPayload } : {}),
     });
 
     const payload = {
@@ -94,9 +90,7 @@ if (!isTapConfigured()) {
       customer: { first_name: "Starly User" },
       source: { id: "src_all" },
       redirect: { url: "https://starlyclub.web.app/payment-success" },
-      metadata: {
-        paymentIntentId: intent._id.toString(),
-      },
+      metadata: { paymentIntentId: intent._id.toString() },
     };
 
     if (provider) {
@@ -121,10 +115,11 @@ if (!isTapConfigured()) {
 
     res.json({ paymentUrl: response.data.transaction.url });
   } catch (err) {
-    console.error("❌ Tap create error:", err.response?.data || err.message);
+    console.error("Tap create error:", err.response?.data || err.message);
     res.status(500).json({ message: "Tap payment initialization failed" });
   }
 };
+
 
 /* =========================================================
    TABBY
