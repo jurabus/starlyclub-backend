@@ -5,6 +5,11 @@ import UserMembership from "../models/UserMembership.js";
 import Customer from "../models/Customer.js";
 import Provider from "../models/Provider.js";
 import MembershipPayment from "../models/MembershipPayment.js";
+import {
+  createTapPayment,
+  createTabbyPayment,
+  createTamaraPayment,
+} from "./paymentController.js";
 
 
 const DAYS_PER_MONTH = 28;
