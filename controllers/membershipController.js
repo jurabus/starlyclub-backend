@@ -448,6 +448,8 @@ export const createMembershipPayment = async (req, res) => {
       planId,
       days,
       amount,
+	   cycle,        // ✅ REQUIRED
+  gateway,      // ✅ REQUIRED
       status: "pending",
     });
 
