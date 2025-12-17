@@ -1,14 +1,25 @@
 import axios from "axios";
 import PaymentIntent from "../models/PaymentIntent.js";
 import Provider from "../models/Provider.js";
+import { finalizePaymentOnce } from "../utils/paymentFinalizer.js";
 
-
+/* =========================================================
+   ENV HELPERS
+========================================================= */
 const isTapConfigured = () =>
   typeof process.env.TAP_SECRET_KEY === "string" &&
   process.env.TAP_SECRET_KEY.trim().length > 10;
 
+const isTabbyConfigured = () =>
+  typeof process.env.TABBY_PUBLIC_KEY === "string" &&
+  process.env.TABBY_PUBLIC_KEY.trim().length > 5;
+
+const isTamaraConfigured = () =>
+  typeof process.env.TAMARA_API_KEY === "string" &&
+  process.env.TAMARA_API_KEY.trim().length > 5;
+
 if (!process.env.TAP_SECRET_KEY) {
-  console.error("❌ TAP_SECRET_KEY is missing from environment variables");
+  console.warn("⚠️ TAP_SECRET_KEY not set → Tap mock mode enabled");
 }
 
 /* =========================================================
@@ -23,11 +34,12 @@ export const createTapPayment = async (req, res) => {
       userId,
       sessionId,
       membershipPaymentId,
+      voucherPayload,
     } = req.body;
 
-    // -------------------------------
-    // 🧪 MOCK MODE (Tap not configured)
-    // -------------------------------
+    /* -------------------------------
+       🧪 MOCK MODE
+    -------------------------------- */
     if (!isTapConfigured()) {
       const intent = await PaymentIntent.create({
         amount,
@@ -37,24 +49,29 @@ export const createTapPayment = async (req, res) => {
         userId: userId || null,
         sessionId: sessionId || null,
         membershipPaymentId: membershipPaymentId || null,
-        status: "paid", // 🔥 auto-paid
+        voucherPayload: voucherPayload || null,
+        status: "pending",
       });
 
+      await finalizePaymentOnce(intent);
+
       return res.json({
-        paymentUrl: `https://starlyclub.web.app/mock-payment-success?intent=${intent._id}`,
-        mock: true,
+        mocked: true,
+        paymentIntentId: intent._id,
       });
     }
 
-    // -------------------------------
-    // 🔴 REAL TAP MODE
-    // -------------------------------
+    /* -------------------------------
+       🔴 REAL TAP MODE
+    -------------------------------- */
     let provider = null;
 
     if (type === "provider_purchase") {
       provider = await Provider.findById(providerId);
       if (!provider?.tapSubMerchantId) {
-        return res.status(400).json({ message: "Provider payout not enabled" });
+        return res.status(400).json({
+          message: "Provider payout not enabled for Tap",
+        });
       }
     }
 
@@ -66,6 +83,7 @@ export const createTapPayment = async (req, res) => {
       userId: userId || null,
       sessionId: sessionId || null,
       membershipPaymentId: membershipPaymentId || null,
+      voucherPayload: voucherPayload || null,
     });
 
     const payload = {
@@ -101,88 +119,155 @@ export const createTapPayment = async (req, res) => {
 
     res.json({ paymentUrl: response.data.transaction.url });
   } catch (err) {
-    console.error("Tap create error:", err.response?.data || err.message);
+    console.error("❌ Tap create error:", err.response?.data || err.message);
     res.status(500).json({ message: "Tap payment initialization failed" });
   }
 };
-
 
 /* =========================================================
    TABBY
 ========================================================= */
 export const createTabbyPayment = async (req, res) => {
-  const {
-    amount,
-    type,
-    providerId,
-    userId,
-    sessionId,
-    membershipPaymentId,
-  } = req.body;
+  try {
+    const {
+      amount,
+      type,
+      providerId,
+      userId,
+      sessionId,
+      membershipPaymentId,
+      voucherPayload,
+    } = req.body;
 
-  let provider = null;
+    /* -------------------------------
+       🧪 MOCK MODE
+    -------------------------------- */
+    if (!isTabbyConfigured()) {
+      const intent = await PaymentIntent.create({
+        amount,
+        type,
+        gateway: "tabby",
+        providerId: providerId || null,
+        userId: userId || null,
+        sessionId: sessionId || null,
+        membershipPaymentId: membershipPaymentId || null,
+        voucherPayload: voucherPayload || null,
+        status: "pending",
+      });
 
-  if (type === "provider_purchase") {
-    provider = await Provider.findById(providerId);
-    if (!provider?.tabbyMerchantId) {
-      return res
-        .status(400)
-        .json({ message: "Provider is not Tabby-enabled" });
+      await finalizePaymentOnce(intent);
+
+      return res.json({
+        mocked: true,
+        paymentIntentId: intent._id,
+      });
     }
+
+    /* -------------------------------
+       🔴 REAL TABBY MODE
+    -------------------------------- */
+    let provider = null;
+
+    if (type === "provider_purchase") {
+      provider = await Provider.findById(providerId);
+      if (!provider?.tabbyMerchantId) {
+        return res.status(400).json({
+          message: "Provider is not Tabby-enabled",
+        });
+      }
+    }
+
+    const intent = await PaymentIntent.create({
+      amount,
+      type,
+      gateway: "tabby",
+      providerId: provider ? providerId : null,
+      userId: userId || null,
+      sessionId: sessionId || null,
+      membershipPaymentId: membershipPaymentId || null,
+      voucherPayload: voucherPayload || null,
+    });
+
+    res.json({
+      paymentUrl: `https://checkout.tabby.ai/?amount=${amount}&ref=${intent._id}`,
+    });
+  } catch (err) {
+    console.error("❌ Tabby error:", err.message);
+    res.status(500).json({ message: "Tabby payment failed" });
   }
-
-  const intent = await PaymentIntent.create({
-    amount,
-    gateway: "tabby",
-    type,
-    providerId: provider ? providerId : null,
-    userId: userId || null,
-    sessionId: sessionId || null,
-    membershipPaymentId: membershipPaymentId || null,
-  });
-
-  res.json({
-    paymentUrl: `https://checkout.tabby.ai/?amount=${amount}&ref=${intent._id}`,
-  });
 };
 
 /* =========================================================
    TAMARA
 ========================================================= */
 export const createTamaraPayment = async (req, res) => {
-  const {
-    amount,
-    type,
-    providerId,
-    userId,
-    sessionId,
-    membershipPaymentId,
-  } = req.body;
+  try {
+    const {
+      amount,
+      type,
+      providerId,
+      userId,
+      sessionId,
+      membershipPaymentId,
+      voucherPayload,
+    } = req.body;
 
-  let provider = null;
+    /* -------------------------------
+       🧪 MOCK MODE
+    -------------------------------- */
+    if (!isTamaraConfigured()) {
+      const intent = await PaymentIntent.create({
+        amount,
+        type,
+        gateway: "tamara",
+        providerId: providerId || null,
+        userId: userId || null,
+        sessionId: sessionId || null,
+        membershipPaymentId: membershipPaymentId || null,
+        voucherPayload: voucherPayload || null,
+        status: "pending",
+      });
 
-  if (type === "provider_purchase") {
-    provider = await Provider.findById(providerId);
-    if (!provider?.tamaraMerchantId) {
-      return res
-        .status(400)
-        .json({ message: "Provider is not Tamara-enabled" });
+      await finalizePaymentOnce(intent);
+
+      return res.json({
+        mocked: true,
+        paymentIntentId: intent._id,
+      });
     }
+
+    /* -------------------------------
+       🔴 REAL TAMARA MODE
+    -------------------------------- */
+    let provider = null;
+
+    if (type === "provider_purchase") {
+      provider = await Provider.findById(providerId);
+      if (!provider?.tamaraMerchantId) {
+        return res.status(400).json({
+          message: "Provider is not Tamara-enabled",
+        });
+      }
+    }
+
+    const intent = await PaymentIntent.create({
+      amount,
+      type,
+      gateway: "tamara",
+      providerId: provider ? providerId : null,
+      userId: userId || null,
+      sessionId: sessionId || null,
+      membershipPaymentId: membershipPaymentId || null,
+      voucherPayload: voucherPayload || null,
+    });
+
+    res.json({
+      paymentUrl: `https://checkout.tamara.co/?amount=${amount}&ref=${intent._id}`,
+    });
+  } catch (err) {
+    console.error("❌ Tamara error:", err.message);
+    res.status(500).json({ message: "Tamara payment failed" });
   }
-
-  const intent = await PaymentIntent.create({
-    amount,
-    gateway: "tamara",
-    type,
-    providerId: provider ? providerId : null,
-    userId: userId || null,
-    sessionId: sessionId || null,
-    membershipPaymentId: membershipPaymentId || null,
-  });
-
-  res.json({
-    paymentUrl: `https://checkout.tamara.co/?amount=${amount}&ref=${intent._id}`,
-  });
 };
 
 /* =========================================================
@@ -191,7 +276,6 @@ export const createTamaraPayment = async (req, res) => {
 export const tapOnboardingCallback = async (req, res) => {
   try {
     const { providerId, sub_merchant_id } = req.body;
-
     const provider = await Provider.findById(providerId);
     if (!provider) return res.status(404).send("Provider not found");
 
@@ -199,16 +283,15 @@ export const tapOnboardingCallback = async (req, res) => {
     provider.tapOnboardingStatus = "verified";
     await provider.save();
 
-    res.send("Onboarding completed successfully");
+    res.send("Tap onboarding completed");
   } catch {
-    res.status(500).send("Onboarding error");
+    res.status(500).send("Tap onboarding error");
   }
 };
 
 export const tabbyOnboardingCallback = async (req, res) => {
   try {
     const { providerId, merchant_id } = req.body;
-
     const provider = await Provider.findById(providerId);
     if (!provider) return res.status(404).send("Provider not found");
 
@@ -225,7 +308,6 @@ export const tabbyOnboardingCallback = async (req, res) => {
 export const tamaraOnboardingCallback = async (req, res) => {
   try {
     const { providerId, merchant_id } = req.body;
-
     const provider = await Provider.findById(providerId);
     if (!provider) return res.status(404).send("Provider not found");
 
