@@ -2,6 +2,15 @@ import axios from "axios";
 import PaymentIntent from "../models/PaymentIntent.js";
 import Provider from "../models/Provider.js";
 
+
+const isTapConfigured = () =>
+  typeof process.env.TAP_SECRET_KEY === "string" &&
+  process.env.TAP_SECRET_KEY.trim().length > 10;
+
+if (!process.env.TAP_SECRET_KEY) {
+  console.error("❌ TAP_SECRET_KEY is missing from environment variables");
+}
+
 /* =========================================================
    TAP
 ========================================================= */
@@ -16,6 +25,30 @@ export const createTapPayment = async (req, res) => {
       membershipPaymentId,
     } = req.body;
 
+    // -------------------------------
+    // 🧪 MOCK MODE (Tap not configured)
+    // -------------------------------
+    if (!isTapConfigured()) {
+      const intent = await PaymentIntent.create({
+        amount,
+        type,
+        gateway: "tap",
+        providerId: providerId || null,
+        userId: userId || null,
+        sessionId: sessionId || null,
+        membershipPaymentId: membershipPaymentId || null,
+        status: "paid", // 🔥 auto-paid
+      });
+
+      return res.json({
+        paymentUrl: `https://starlyclub.web.app/mock-payment-success?intent=${intent._id}`,
+        mock: true,
+      });
+    }
+
+    // -------------------------------
+    // 🔴 REAL TAP MODE
+    // -------------------------------
     let provider = null;
 
     if (type === "provider_purchase") {
@@ -46,13 +79,9 @@ export const createTapPayment = async (req, res) => {
       },
     };
 
-    // 🔀 Split only for provider purchases
     if (provider) {
       payload.destinations = [
-        {
-          id: provider.tapSubMerchantId,
-          amount,
-        },
+        { id: provider.tapSubMerchantId, amount },
       ];
     }
 
@@ -72,10 +101,11 @@ export const createTapPayment = async (req, res) => {
 
     res.json({ paymentUrl: response.data.transaction.url });
   } catch (err) {
-    console.error("Tap create error:", err);
-    res.status(500).json({ message: err.message });
+    console.error("Tap create error:", err.response?.data || err.message);
+    res.status(500).json({ message: "Tap payment initialization failed" });
   }
 };
+
 
 /* =========================================================
    TABBY
