@@ -68,41 +68,53 @@ export const finalizePaymentOnce = async (intent) => {
     return;
   }
 
-  /* ================= ORDER (ORIGINAL LOGIC — UNTOUCHED) ================= */
-  const cart = await Cart.findOne(
-    locked.userId
-      ? { userId: locked.userId }
-      : { sessionId: locked.sessionId }
-  ).populate("items.productId");
+  /* ================= ORDER (SAFE + COMPLETE) ================= */
+const cart = await Cart.findOne(
+  locked.userId
+    ? { userId: locked.userId }
+    : { sessionId: locked.sessionId }
+).populate("items.productId");
 
-  if (!cart || cart.items.length === 0) return;
+if (!cart || cart.items.length === 0) return;
 
-  const items = cart.items.map((i) => ({
-    productId: i.productId._id,
-    name: i.productId.name,
-    imageUrl: i.productId.imageUrl,
-    price: i.productId.newPrice,
-    quantity: i.quantity,
-  }));
+// ✅ DERIVE providerId if missing
+let providerId = locked.providerId;
 
-  await Order.create({
-    userId: locked.userId,
-    sessionId: locked.sessionId,
-    providerId: locked.providerId,
-    items,
-    total: locked.amount,
-    payment: {
-      gateway: locked.gateway,
-      paymentIntentId: locked._id,
-      paidAt: new Date(),
-    },
-    status: "pending",
-  });
+if (!providerId) {
+  providerId = cart.items[0]?.productId?.providerId;
+  if (!providerId) {
+    console.error("❌ Cannot derive providerId for order");
+    return;
+  }
+}
 
-  await Cart.findOneAndUpdate(
-    locked.userId
-      ? { userId: locked.userId }
-      : { sessionId: locked.sessionId },
-    { items: [] }
-  );
+const items = cart.items.map((i) => ({
+  productId: i.productId._id,
+  name: i.productId.name,
+  imageUrl: i.productId.imageUrl,
+  price: i.productId.newPrice,
+  quantity: i.quantity,
+}));
+
+await Order.create({
+  userId: locked.userId,
+  sessionId: locked.sessionId,
+  providerId, // ✅ GUARANTEED
+  items,
+  total: locked.amount,
+  payment: {
+    gateway: locked.gateway,
+    paymentIntentId: locked._id,
+    paidAt: new Date(),
+  },
+  status: "pending",
+});
+
+await Cart.findOneAndUpdate(
+  locked.userId
+    ? { userId: locked.userId }
+    : { sessionId: locked.sessionId },
+  { items: [] }
+);
+
 };
