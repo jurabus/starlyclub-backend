@@ -40,26 +40,28 @@ export const createTapPayment = async (req, res) => {
     /* -------------------------------
        🧪 MOCK MODE
     -------------------------------- */
-    if (!isTapConfigured()) {
-      const intent = await PaymentIntent.create({
-        amount,
-        type,
-        gateway: "tap",
-        providerId: providerId || null,
-        userId: userId || null,
-        sessionId: sessionId || null,
-        membershipPaymentId: membershipPaymentId || null,
-        voucherPayload: voucherPayload || null,
-        status: "pending",
-      });
+    // 🧪 MOCK MODE (Tap not configured)
+if (!isTapConfigured()) {
+  const intent = await PaymentIntent.create({
+    amount,
+    type,
+    gateway: "tap",
+    providerId: providerId || null,
+    userId: userId || null,
+    sessionId: sessionId || null,
+    membershipPaymentId: membershipPaymentId || null,
+    voucherPayload: req.body.voucherPayload || null,
+    status: "pending",
+  });
 
-      await finalizePaymentOnce(intent);
+  await finalizePaymentOnce(intent);
 
-      return res.json({
-        mocked: true,
-        paymentIntentId: intent._id,
-      });
-    }
+  return res.json({
+    mocked: true,
+    paymentIntentId: intent._id,
+  });
+}
+
 
     /* -------------------------------
        🔴 REAL TAP MODE
