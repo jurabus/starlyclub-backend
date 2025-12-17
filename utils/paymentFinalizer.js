@@ -6,7 +6,7 @@ import Voucher from "../models/Voucher.js";
 import Provider from "../models/Provider.js";
 
 export const finalizePaymentOnce = async (intent) => {
-  // 🔒 Atomic idempotency lock
+  // 🔒 Atomic idempotency lock (HARD GUARANTEE)
   const locked = await PaymentIntent.findOneAndUpdate(
     { _id: intent._id, status: { $ne: "paid" } },
     { status: "paid", paidAt: new Date() },
@@ -35,6 +35,21 @@ export const finalizePaymentOnce = async (intent) => {
     const provider = await Provider.findById(locked.providerId);
     if (!provider) return;
 
+    // 🛑 EXTRA SAFETY: prevent duplicate voucher creation
+    const existing = await Voucher.findOne({
+      userId: locked.userId,
+      provider: provider._id,
+      price: locked.amount,
+      faceValue: locked.voucherPayload.faceValue,
+      createdAt: { $gte: new Date(Date.now() - 60 * 1000) }, // last 60s
+    });
+
+    if (existing) return;
+
+    const purchasedAt = new Date();
+    const validUntil = new Date(purchasedAt);
+    validUntil.setDate(validUntil.getDate() + 28);
+
     await Voucher.create({
       provider: provider._id,
       providerName: provider.name,
@@ -46,11 +61,14 @@ export const finalizePaymentOnce = async (intent) => {
       userId: locked.userId,
       status: "unused",
       name: `${provider.name} Voucher ${locked.voucherPayload.faceValue} SR`,
+      purchasedAt,
+      validUntil, // ✅ NEW (non-breaking)
     });
+
     return;
   }
 
-  /* ================= ORDER (ORIGINAL LOGIC) ================= */
+  /* ================= ORDER (ORIGINAL LOGIC — UNTOUCHED) ================= */
   const cart = await Cart.findOne(
     locked.userId
       ? { userId: locked.userId }

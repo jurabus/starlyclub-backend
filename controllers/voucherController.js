@@ -3,7 +3,16 @@ import Provider from "../models/Provider.js";
 import Customer from "../models/Customer.js";
 import crypto from "crypto";
 import PaymentIntent from "../models/PaymentIntent.js";
+import {
+  createTapPayment,
+  createTabbyPayment,
+  createTamaraPayment,
+} from "./paymentController.js";
+import { isTapConfigured } from "../utils/isTapConfigured.js";
 
+/* ============================================================
+   🔹 CREATE VOUCHER PAYMENT (GATEWAY / MOCK / WEBHOOK SAFE)
+   ============================================================ */
 export const createVoucherPayment = async (req, res) => {
   try {
     const { userId, providerId, amount, gateway } = req.body;
@@ -16,23 +25,61 @@ export const createVoucherPayment = async (req, res) => {
     if (!provider)
       return res.status(404).json({ message: "Provider not found" });
 
-    const disc = provider.voucherDiscountPercent || 0;
-    const price = Math.round(amount - (amount * disc) / 100);
+    const discountPercent = provider.voucherDiscountPercent || 0;
+    const finalPrice = Math.round(amount - (amount * discountPercent) / 100);
 
-    // 🔐 Attach payment intent metadata
-    req.body.amount = price;
-    req.body.type = "provider_purchase";
-    req.body.userId = userId;
-    req.body.providerId = providerId;
+    /* ---------------- PAYMENT INTENT ---------------- */
+    const intent = await PaymentIntent.create({
+      userId,
+      providerId,
+      amount: finalPrice,
+      currency: "SAR",
+      gateway,
+      type: "provider_purchase",
+      voucherPayload: {
+        faceValue: amount,
+        discountPercent,
+        providerName: provider.name,
+        logoUrl: provider.logoUrl || "",
+      },
+      status: "pending",
+    });
 
-    // 🔗 This tells finalizer to create voucher
-    req.body.voucherPayload = {
-      faceValue: amount,
-      discountPercent: disc,
-      providerName: provider.name,
-      logoUrl: provider.logoUrl || "",
-    };
+    req.body.amount = finalPrice;
+    req.body.paymentIntentId = intent._id;
 
+    /* ---------------- MOCK MODE ---------------- */
+    if (gateway === "tap" && !isTapConfigured()) {
+      const purchasedAt = new Date();
+      const validUntil = new Date(purchasedAt);
+      validUntil.setDate(validUntil.getDate() + 28);
+
+      await Voucher.create({
+        provider: provider._id,
+        providerName: provider.name,
+        logoUrl: provider.logoUrl || "",
+        currency: "SR",
+        faceValue: amount,
+        price: finalPrice,
+        discountPercent,
+        userId,
+        status: "unused",
+        purchasedAt,
+        validUntil,
+        name: `${provider.name} Voucher ${amount} SR`,
+      });
+
+      intent.status = "paid";
+      intent.paidAt = new Date();
+      await intent.save();
+
+      return res.json({
+        mocked: true,
+        paymentUrl: "MOCK_SUCCESS",
+      });
+    }
+
+    /* ---------------- REAL GATEWAYS ---------------- */
     if (gateway === "tap") return createTapPayment(req, res);
     if (gateway === "tabby") return createTabbyPayment(req, res);
     if (gateway === "tamara") return createTamaraPayment(req, res);
@@ -44,9 +91,9 @@ export const createVoucherPayment = async (req, res) => {
   }
 };
 
-// ===========================================
-// 1) USER CREATES A VOUCHER
-// ===========================================
+/* ============================================================
+   🔹 LEGACY WALLET PURCHASE (KEPT FOR BACKWARD COMPATIBILITY)
+   ============================================================ */
 export const purchaseVoucher = async (req, res) => {
   try {
     const { userId, providerId, amount } = req.body;
@@ -62,16 +109,18 @@ export const purchaseVoucher = async (req, res) => {
     if (!user)
       return res.status(404).json({ success: false, message: "User not found" });
 
-    const disc = provider.voucherDiscountPercent || 0;
-    const price = amount - (amount * disc) / 100;
-    const finalPrice = Math.round(price);
+    const discountPercent = provider.voucherDiscountPercent || 0;
+    const finalPrice = Math.round(amount - (amount * discountPercent) / 100);
 
     if (user.walletBalance < finalPrice)
       return res.status(400).json({ success: false, message: "Insufficient wallet balance" });
 
-    // Deduct from wallet
     user.walletBalance -= finalPrice;
     await user.save();
+
+    const purchasedAt = new Date();
+    const validUntil = new Date(purchasedAt);
+    validUntil.setDate(validUntil.getDate() + 28);
 
     const voucher = await Voucher.create({
       provider: provider._id,
@@ -80,9 +129,11 @@ export const purchaseVoucher = async (req, res) => {
       currency: "SR",
       faceValue: amount,
       price: finalPrice,
-      discountPercent: disc,
-      userId: userId,
+      discountPercent,
+      userId,
       status: "unused",
+      purchasedAt,
+      validUntil,
       name: `${provider.name} Voucher ${amount} SR`,
     });
 
@@ -97,12 +148,12 @@ export const purchaseVoucher = async (req, res) => {
   }
 };
 
-// ===========================================
-// 2) USER LISTS THEIR VOUCHERS
-// ===========================================
+/* ============================================================
+   🔹 LIST USER VOUCHERS
+   ============================================================ */
 export const getUserVouchers = async (req, res) => {
   try {
-    const userId = req.query.userId;
+    const { userId } = req.query;
 
     if (!userId)
       return res.status(400).json({ success: false, message: "Missing userId" });
@@ -117,62 +168,49 @@ export const getUserVouchers = async (req, res) => {
   }
 };
 
-
-// ===========================================
-// 3) ADMIN LISTS ALL VOUCHERS
-// ===========================================
-export const adminListVouchers = async (req, res) => {
+/* ============================================================
+   🔹 ADMIN LIST
+   ============================================================ */
+export const adminListVouchers = async (_req, res) => {
   try {
     const vouchers = await Voucher.find()
       .populate("provider", "name logoUrl")
       .populate("userId", "name email")
-      .sort({ createdAt: -1 })
-      .lean();
+      .sort({ createdAt: -1 });
 
     res.json({ success: true, vouchers });
   } catch (err) {
-    console.error("❌ adminListVouchers error:", err);
     res.status(500).json({ success: false, message: err.message });
   }
 };
 
-// ===========================================
-// 4) ISSUE QR FOR A VOUCHER (USER)
-// ===========================================
+/* ============================================================
+   🔹 ISSUE QR
+   ============================================================ */
 export const issueVoucherQR = async (req, res) => {
   try {
-    const { id } = req.params;
-
-    const voucher = await Voucher.findById(id);
+    const voucher = await Voucher.findById(req.params.id);
     if (!voucher)
       return res.status(404).json({ success: false, message: "Voucher not found" });
 
-   // ❗ 28-DAY EXPIRY CHECK
-const expiryDate = new Date(voucher.purchasedAt);
-expiryDate.setDate(expiryDate.getDate() + 28);
-const now = new Date();
+    if (voucher.validUntil && new Date() > voucher.validUntil) {
+      voucher.status = "expired";
+      await voucher.save();
+      return res.status(400).json({
+        success: false,
+        message: "Voucher expired",
+      });
+    }
 
-if (now > expiryDate) {
-  voucher.status = "expired";
-  await voucher.save();
-  return res.status(400).json({
-    success: false,
-    message: "Voucher expired after 28 days",
-  });
-}
+    if (voucher.status !== "unused") {
+      return res.status(400).json({
+        success: false,
+        message: "Only unused vouchers can generate QR",
+      });
+    }
 
-// ❗ Only unused vouchers allowed
-if (voucher.status !== "unused") {
-  return res.status(400).json({
-    success: false,
-    message: "Only unused vouchers can generate QR",
-  });
-}
-
-
-    const TTL = 30;
     const code = crypto.randomBytes(4).toString("hex").toUpperCase();
-    const expiresAt = new Date(Date.now() + TTL * 1000);
+    const expiresAt = new Date(Date.now() + 30 * 1000);
 
     voucher.currentQrCode = code;
     voucher.qrIssuedAt = new Date();
@@ -183,83 +221,52 @@ if (voucher.status !== "unused") {
       (req.headers["x-forwarded-proto"] || "").split(",")[0] || req.protocol;
     const host = req.get("host");
 
-    const validationUrl = `${proto}://${host}/api/vouchers/qr/validate/${code}`;
-
     res.json({
       success: true,
       code,
       expiresAt,
-      validationUrl,
+      validationUrl: `${proto}://${host}/api/vouchers/qr/validate/${code}`,
     });
   } catch (err) {
-    console.error("❌ issueVoucherQR error:", err);
     res.status(500).json({ success: false, message: err.message });
   }
 };
 
-// ===========================================
-// 5) VALIDATE QR (PROVIDER SCANNER)
-// ===========================================
+/* ============================================================
+   🔹 VALIDATE QR
+   ============================================================ */
 export const validateVoucherQR = async (req, res) => {
   try {
-    const code = (req.params.code || "").trim().toUpperCase();
-const now = new Date();
+    const code = req.params.code.trim().toUpperCase();
+    const now = new Date();
 
-// Find matching voucher with valid QR
-let voucher = await Voucher.findOne({
-  currentQrCode: code,
-  status: "unused",
-})
-  .populate("provider");
+    const voucher = await Voucher.findOne({
+      currentQrCode: code,
+      status: "unused",
+    }).populate("provider");
 
-if (!voucher) {
-  return res.status(404).json({
-    success: false,
-    message: "Invalid or expired voucher QR",
-  });
-}
+    if (!voucher)
+      return res.status(404).json({ success: false, message: "Invalid QR" });
 
-// ❗ Check QR expiry (30 seconds)
-if (!voucher.qrExpiresAt || voucher.qrExpiresAt < now) {
-  return res.status(400).json({
-    success: false,
-    message: "QR code expired",
-  });
-}
+    if (!voucher.qrExpiresAt || voucher.qrExpiresAt < now)
+      return res.status(400).json({ success: false, message: "QR expired" });
 
-// ❗ 28-DAY EXPIRY CHECK
-const expiryDate = new Date(voucher.purchasedAt);
-expiryDate.setDate(expiryDate.getDate() + 28);
-
-if (now > expiryDate) {
-  voucher.status = "expired";
-  await voucher.save();
-  return res.status(400).json({
-    success: false,
-    message: "Voucher has expired",
-  });
-}
-
+    if (voucher.validUntil && now > voucher.validUntil) {
+      voucher.status = "expired";
+      await voucher.save();
+      return res.status(400).json({ success: false, message: "Voucher expired" });
+    }
 
     voucher.status = "redeemed";
-    voucher.redeemedAt = new Date();
+    voucher.redeemedAt = now;
     await voucher.save();
 
     res.json({
       success: true,
-      message: "Voucher validated successfully",
-      voucher: {
-        id: voucher._id,
-        faceValue: voucher.faceValue,
-        price: voucher.price,
-        userId: voucher.userId,
-        providerName: voucher.providerName,
-        provider: voucher.provider,
-        redeemedAt: voucher.redeemedAt,
-      },
+      message: "Voucher validated",
+      voucher,
     });
   } catch (err) {
-    console.error("❌ validateVoucherQR error:", err);
     res.status(500).json({ success: false, message: err.message });
   }
 };
