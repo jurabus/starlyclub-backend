@@ -10,7 +10,7 @@ import {
   createTabbyPayment,
   createTamaraPayment,
 } from "./paymentController.js";
-
+import { isTapConfigured } from "../utils/isTapConfigured.js";
 
 const DAYS_PER_MONTH = 28;
 const YEARLY_DISCOUNT = 0.4; // 40%
@@ -421,6 +421,8 @@ export const scanMembership = async (req, res) => {
   }
 };
 
+
+
 export const createMembershipPayment = async (req, res) => {
   try {
     const { userId, planId, cycle, gateway } = req.body;
@@ -435,26 +437,42 @@ export const createMembershipPayment = async (req, res) => {
     }
 
     const months = cycle === "yearly" ? 12 : 1;
+    const days = cycle === "yearly" ? 365 : 30;
+
     let amount = plan.monthlyPrice * months;
+    if (cycle === "yearly") amount = Math.round(amount * 0.6);
 
-    if (cycle === "yearly") {
-      amount = Math.round(amount * 0.6); // 40% OFF
-    }
+    // 1️⃣ Create membership payment record
+    const membershipPayment = await MembershipPayment.create({
+      userId,
+      planId,
+      days,
+      amount,
+      status: "pending",
+    });
 
-    // 🔐 Attach required fields for payment controllers
+    // 2️⃣ Attach required fields for PaymentIntent
     req.body.amount = amount;
     req.body.type = "membership_purchase";
     req.body.userId = userId;
+    req.body.membershipPaymentId = membershipPayment._id;
 
-    if (gateway === "tap") {
-      return createTapPayment(req, res);
+    // 3️⃣ MOCK MODE (NO TAP CONFIGURED)
+    if (gateway === "tap" && !isTapConfigured()) {
+      await finalizeMembershipPayment({
+        metadata: { membershipPaymentId: membershipPayment._id },
+      });
+
+      return res.json({
+        paymentUrl: "MOCK_SUCCESS",
+        mocked: true,
+      });
     }
-    if (gateway === "tabby") {
-      return createTabbyPayment(req, res);
-    }
-    if (gateway === "tamara") {
-      return createTamaraPayment(req, res);
-    }
+
+    // 4️⃣ REAL GATEWAYS
+    if (gateway === "tap") return createTapPayment(req, res);
+    if (gateway === "tabby") return createTabbyPayment(req, res);
+    if (gateway === "tamara") return createTamaraPayment(req, res);
 
     return res.status(400).json({ message: "Invalid payment gateway" });
   } catch (e) {
@@ -462,6 +480,7 @@ export const createMembershipPayment = async (req, res) => {
     res.status(500).json({ message: "Payment initialization failed" });
   }
 };
+
 
 
 

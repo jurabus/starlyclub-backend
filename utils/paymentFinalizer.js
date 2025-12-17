@@ -5,20 +5,17 @@ import Order from "../models/Order.js";
 import Voucher from "../models/Voucher.js";
 import Provider from "../models/Provider.js";
 
-
-
-
 export const finalizePaymentOnce = async (intent) => {
-  // 🔒 Atomic lock — prevents double execution
+  // 🔒 Atomic idempotency lock
   const locked = await PaymentIntent.findOneAndUpdate(
     { _id: intent._id, status: { $ne: "paid" } },
     { status: "paid", paidAt: new Date() },
     { new: true }
   );
 
-  if (!locked) return; // already finalized
+  if (!locked) return;
 
-  /* ================= MEMBERSHIP PAYMENT ================= */
+  /* ================= MEMBERSHIP ================= */
   if (locked.type === "membership_purchase") {
     if (!locked.membershipPaymentId) return;
 
@@ -28,33 +25,32 @@ export const finalizePaymentOnce = async (intent) => {
     return;
   }
 
-//
-/* ================= VOUCHER PAYMENT ================= */
-if (
-  locked.type === "provider_purchase" &&
-  locked.providerId &&
-  locked.userId &&
-  locked.voucherPayload
-) {
-  const provider = await Provider.findById(locked.providerId);
+  /* ================= VOUCHER ================= */
+  if (
+    locked.type === "provider_purchase" &&
+    locked.providerId &&
+    locked.userId &&
+    locked.voucherPayload
+  ) {
+    const provider = await Provider.findById(locked.providerId);
+    if (!provider) return;
 
-  await Voucher.create({
-    provider: provider._id,
-    providerName: provider.name,
-    logoUrl: provider.logoUrl || "",
-    currency: "SR",
-    faceValue: locked.voucherPayload.faceValue,
-    price: locked.amount,
-    discountPercent: locked.voucherPayload.discountPercent,
-    userId: locked.userId,
-    status: "unused",
-    name: `${provider.name} Voucher ${locked.voucherPayload.faceValue} SR`,
-  });
+    await Voucher.create({
+      provider: provider._id,
+      providerName: provider.name,
+      logoUrl: provider.logoUrl || "",
+      currency: "SR",
+      faceValue: locked.voucherPayload.faceValue,
+      price: locked.amount,
+      discountPercent: locked.voucherPayload.discountPercent,
+      userId: locked.userId,
+      status: "unused",
+      name: `${provider.name} Voucher ${locked.voucherPayload.faceValue} SR`,
+    });
+    return;
+  }
 
-  return;
-}
-  /* ================= ORDER PAYMENT (ORIGINAL LOGIC) ================= */
-
+  /* ================= ORDER (ORIGINAL LOGIC) ================= */
   const cart = await Cart.findOne(
     locked.userId
       ? { userId: locked.userId }

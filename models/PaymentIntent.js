@@ -36,6 +36,10 @@ const paymentIntentSchema = new mongoose.Schema(
       enum: ["tap", "tabby", "tamara"],
       required: true,
     },
+voucherPayload: {
+  type: Object,
+  default: null,
+},
 
     /* ================= AMOUNT ================= */
     amount: {
