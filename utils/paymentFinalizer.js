@@ -111,6 +111,7 @@ await Order.create({
     paidAt: new Date(),
   },
   status: "pending",
+  expiresAt: new Date(Date.now() + 5 * 60 * 1000),
 });
 
 await Cart.findOneAndUpdate(

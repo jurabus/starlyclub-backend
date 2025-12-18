@@ -105,6 +105,32 @@ export const getOrderById = async (req, res) => {
 /* -----------------------------------------------------------------------------
    6) PROVIDER — Get Orders for Provider
 ----------------------------------------------------------------------------- */
+/* -----------------------------------------------------------------------------
+   11) USER — Get Order Status (Polling)
+----------------------------------------------------------------------------- */
+export const getOrderStatus = async (req, res) => {
+  try {
+    const { orderId } = req.params;
+
+    const order = await Order.findById(orderId).select(
+      "status createdAt expiresAt"
+    );
+
+    if (!order) {
+      return res.status(404).json({ ok: false });
+    }
+
+    res.json({
+      ok: true,
+      status: order.status,
+      createdAt: order.createdAt,
+      expiresAt: order.expiresAt,
+    });
+  } catch (err) {
+    res.status(500).json({ ok: false });
+  }
+};
+
 /* -----------------------------------------------------------------------------  
    PROVIDER — Paginated Orders + Pending First  
 ----------------------------------------------------------------------------- */
