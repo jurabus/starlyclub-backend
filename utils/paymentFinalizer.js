@@ -27,11 +27,14 @@ export const finalizePaymentOnce = async (intent) => {
 
   /* ================= VOUCHER ================= */
   if (
-    locked.type === "provider_purchase" &&
-    locked.providerId &&
-    locked.userId &&
-    locked.voucherPayload
-  ) {
+  locked.type === "provider_purchase" &&
+  locked.providerId &&
+  locked.userId &&
+  locked.voucherPayload &&
+  typeof locked.voucherPayload.faceValue === "number" &&
+  typeof locked.voucherPayload.discountPercent === "number"
+) {
+
     const provider = await Provider.findById(locked.providerId);
     if (!provider) return;
 

@@ -21,6 +21,12 @@ const isTamaraConfigured = () =>
 if (!process.env.TAP_SECRET_KEY) {
   console.warn("⚠️ TAP_SECRET_KEY not set → Tap mock mode enabled");
 }
+const safeVoucherPayload = (voucherPayload) =>
+  voucherPayload &&
+  typeof voucherPayload.faceValue === "number" &&
+  typeof voucherPayload.discountPercent === "number"
+    ? voucherPayload
+    : null;
 
 /* =========================================================
    TAP
@@ -49,7 +55,14 @@ export const createTapPayment = async (req, res) => {
         membershipPaymentId: membershipPaymentId || null,
 
         // ✅ ONLY attach if it exists
-        ...(voucherPayload ? { voucherPayload } : {}),
+       ...(
+  voucherPayload &&
+  typeof voucherPayload.faceValue === "number" &&
+  typeof voucherPayload.discountPercent === "number"
+    ? { voucherPayload }
+    : {}
+),
+
 
         status: "pending",
       });
@@ -81,7 +94,14 @@ export const createTapPayment = async (req, res) => {
       userId: userId || null,
       sessionId: sessionId || null,
       membershipPaymentId: membershipPaymentId || null,
-      ...(voucherPayload ? { voucherPayload } : {}),
+      ...(
+  voucherPayload &&
+  typeof voucherPayload.faceValue === "number" &&
+  typeof voucherPayload.discountPercent === "number"
+    ? { voucherPayload }
+    : {}
+),
+
     });
 
     const payload = {
@@ -127,7 +147,10 @@ export const createTapPayment = async (req, res) => {
       userId: req.body.userId || null,
       sessionId: req.body.sessionId || null,
       membershipPaymentId: req.body.membershipPaymentId || null,
-      ...(req.body.voucherPayload ? { voucherPayload: req.body.voucherPayload } : {}),
+      ...(safeVoucherPayload(req.body.voucherPayload)
+  ? { voucherPayload: safeVoucherPayload(req.body.voucherPayload) }
+  : {}),
+
       status: "pending",
     });
 
@@ -176,7 +199,10 @@ export const createTabbyPayment = async (req, res) => {
         userId: userId || null,
         sessionId: sessionId || null,
         membershipPaymentId: membershipPaymentId || null,
-        voucherPayload: voucherPayload || null,
+        ...(safeVoucherPayload(voucherPayload)
+  ? { voucherPayload: safeVoucherPayload(voucherPayload) }
+  : {}),
+
         status: "pending",
       });
 
@@ -210,7 +236,10 @@ export const createTabbyPayment = async (req, res) => {
       userId: userId || null,
       sessionId: sessionId || null,
       membershipPaymentId: membershipPaymentId || null,
-      voucherPayload: voucherPayload || null,
+      ...(safeVoucherPayload(voucherPayload)
+  ? { voucherPayload: safeVoucherPayload(voucherPayload) }
+  : {}),
+
     });
 
     res.json({
@@ -249,7 +278,10 @@ export const createTamaraPayment = async (req, res) => {
         userId: userId || null,
         sessionId: sessionId || null,
         membershipPaymentId: membershipPaymentId || null,
-        voucherPayload: voucherPayload || null,
+        ...(safeVoucherPayload(voucherPayload)
+  ? { voucherPayload: safeVoucherPayload(voucherPayload) }
+  : {}),
+
         status: "pending",
       });
 
@@ -283,7 +315,10 @@ export const createTamaraPayment = async (req, res) => {
       userId: userId || null,
       sessionId: sessionId || null,
       membershipPaymentId: membershipPaymentId || null,
-      voucherPayload: voucherPayload || null,
+      ...(safeVoucherPayload(voucherPayload)
+  ? { voucherPayload: safeVoucherPayload(voucherPayload) }
+  : {}),
+
     });
 
     res.json({
