@@ -1,6 +1,7 @@
 import axios from "axios";
 import PaymentIntent from "../models/PaymentIntent.js";
 import Provider from "../models/Provider.js";
+import Order from "../models/Order.js"; // ✅ ADDED
 import { finalizePaymentOnce } from "../utils/paymentFinalizer.js";
 
 /* =========================================================
@@ -21,6 +22,7 @@ const isTamaraConfigured = () =>
 if (!process.env.TAP_SECRET_KEY) {
   console.warn("⚠️ TAP_SECRET_KEY not set → Tap mock mode enabled");
 }
+
 const safeVoucherPayload = (voucherPayload) =>
   voucherPayload &&
   typeof voucherPayload.faceValue === "number" &&
@@ -40,10 +42,12 @@ export const createTapPayment = async (req, res) => {
       userId,
       sessionId,
       membershipPaymentId,
-      voucherPayload, // <-- explicitly destructure
+      voucherPayload,
     } = req.body;
 
-    // 🧪 MOCK MODE (Tap not configured)
+    /* -------------------------------
+       🧪 MOCK MODE
+    -------------------------------- */
     if (!isTapConfigured()) {
       const intent = await PaymentIntent.create({
         amount,
@@ -53,26 +57,21 @@ export const createTapPayment = async (req, res) => {
         userId: userId || null,
         sessionId: sessionId || null,
         membershipPaymentId: membershipPaymentId || null,
-
-        // ✅ ONLY attach if it exists
-       ...(
-  voucherPayload &&
-  typeof voucherPayload.faceValue === "number" &&
-  typeof voucherPayload.discountPercent === "number"
-    ? { voucherPayload }
-    : {}
-),
-
-
+        ...(safeVoucherPayload(voucherPayload)
+          ? { voucherPayload: safeVoucherPayload(voucherPayload) }
+          : {}),
         status: "pending",
       });
 
-      // ✅ Finalize (creates ORDER or VOUCHER safely)
       await finalizePaymentOnce(intent);
+
+      const order = await Order.findOne({
+        "payment.paymentIntentId": intent._id,
+      }).select("_id");
 
       return res.json({
         mocked: true,
-        paymentIntentId: intent._id,
+        orderId: order?._id,
       });
     }
 
@@ -94,14 +93,9 @@ export const createTapPayment = async (req, res) => {
       userId: userId || null,
       sessionId: sessionId || null,
       membershipPaymentId: membershipPaymentId || null,
-      ...(
-  voucherPayload &&
-  typeof voucherPayload.faceValue === "number" &&
-  typeof voucherPayload.discountPercent === "number"
-    ? { voucherPayload }
-    : {}
-),
-
+      ...(safeVoucherPayload(voucherPayload)
+        ? { voucherPayload: safeVoucherPayload(voucherPayload) }
+        : {}),
     });
 
     const payload = {
@@ -114,9 +108,7 @@ export const createTapPayment = async (req, res) => {
     };
 
     if (provider) {
-      payload.destinations = [
-        { id: provider.tapSubMerchantId, amount },
-      ];
+      payload.destinations = [{ id: provider.tapSubMerchantId, amount }];
     }
 
     const response = await axios.post(
@@ -135,42 +127,45 @@ export const createTapPayment = async (req, res) => {
 
     res.json({ paymentUrl: response.data.transaction.url });
   } catch (err) {
-  console.error("Tap create error:", err.response?.data || err.message);
+    console.error("Tap create error:", err.response?.data || err.message);
 
-  // 🧪 FALLBACK TO MOCK MODE (DEV / SAFETY)
-  try {
-    const intent = await PaymentIntent.create({
-      amount: req.body.amount,
-      type: req.body.type,
-      gateway: "tap",
-      providerId: req.body.providerId || null,
-      userId: req.body.userId || null,
-      sessionId: req.body.sessionId || null,
-      membershipPaymentId: req.body.membershipPaymentId || null,
-      ...(safeVoucherPayload(req.body.voucherPayload)
-  ? { voucherPayload: safeVoucherPayload(req.body.voucherPayload) }
-  : {}),
+    /* -------------------------------
+       🧪 FALLBACK MOCK
+    -------------------------------- */
+    try {
+      const intent = await PaymentIntent.create({
+        amount: req.body.amount,
+        type: req.body.type,
+        gateway: "tap",
+        providerId: req.body.providerId || null,
+        userId: req.body.userId || null,
+        sessionId: req.body.sessionId || null,
+        membershipPaymentId: req.body.membershipPaymentId || null,
+        ...(safeVoucherPayload(req.body.voucherPayload)
+          ? { voucherPayload: safeVoucherPayload(req.body.voucherPayload) }
+          : {}),
+        status: "pending",
+      });
 
-      status: "pending",
-    });
+      await finalizePaymentOnce(intent);
 
-    await finalizePaymentOnce(intent);
+      const order = await Order.findOne({
+        "payment.paymentIntentId": intent._id,
+      }).select("_id");
 
-    return res.json({
-      mocked: true,
-      paymentIntentId: intent._id,
-      fallback: true,
-    });
-  } catch (fallbackErr) {
-    console.error("Tap fallback mock failed:", fallbackErr.message);
-    return res.status(500).json({
-      message: "Tap payment failed (fallback mock also failed)",
-    });
+      return res.json({
+        mocked: true,
+        fallback: true,
+        orderId: order?._id,
+      });
+    } catch (fallbackErr) {
+      console.error("Tap fallback mock failed:", fallbackErr.message);
+      return res.status(500).json({
+        message: "Tap payment failed (fallback mock also failed)",
+      });
+    }
   }
-}
-
 };
-
 
 /* =========================================================
    TABBY
@@ -200,17 +195,20 @@ export const createTabbyPayment = async (req, res) => {
         sessionId: sessionId || null,
         membershipPaymentId: membershipPaymentId || null,
         ...(safeVoucherPayload(voucherPayload)
-  ? { voucherPayload: safeVoucherPayload(voucherPayload) }
-  : {}),
-
+          ? { voucherPayload: safeVoucherPayload(voucherPayload) }
+          : {}),
         status: "pending",
       });
 
       await finalizePaymentOnce(intent);
 
+      const order = await Order.findOne({
+        "payment.paymentIntentId": intent._id,
+      }).select("_id");
+
       return res.json({
         mocked: true,
-        paymentIntentId: intent._id,
+        orderId: order?._id,
       });
     }
 
@@ -222,9 +220,9 @@ export const createTabbyPayment = async (req, res) => {
     if (type === "provider_purchase") {
       provider = await Provider.findById(providerId);
       if (!provider?.tabbyMerchantId) {
-        return res.status(400).json({
-          message: "Provider is not Tabby-enabled",
-        });
+        return res
+          .status(400)
+          .json({ message: "Provider is not Tabby-enabled" });
       }
     }
 
@@ -237,9 +235,8 @@ export const createTabbyPayment = async (req, res) => {
       sessionId: sessionId || null,
       membershipPaymentId: membershipPaymentId || null,
       ...(safeVoucherPayload(voucherPayload)
-  ? { voucherPayload: safeVoucherPayload(voucherPayload) }
-  : {}),
-
+        ? { voucherPayload: safeVoucherPayload(voucherPayload) }
+        : {}),
     });
 
     res.json({
@@ -279,17 +276,20 @@ export const createTamaraPayment = async (req, res) => {
         sessionId: sessionId || null,
         membershipPaymentId: membershipPaymentId || null,
         ...(safeVoucherPayload(voucherPayload)
-  ? { voucherPayload: safeVoucherPayload(voucherPayload) }
-  : {}),
-
+          ? { voucherPayload: safeVoucherPayload(voucherPayload) }
+          : {}),
         status: "pending",
       });
 
       await finalizePaymentOnce(intent);
 
+      const order = await Order.findOne({
+        "payment.paymentIntentId": intent._id,
+      }).select("_id");
+
       return res.json({
         mocked: true,
-        paymentIntentId: intent._id,
+        orderId: order?._id,
       });
     }
 
@@ -301,9 +301,9 @@ export const createTamaraPayment = async (req, res) => {
     if (type === "provider_purchase") {
       provider = await Provider.findById(providerId);
       if (!provider?.tamaraMerchantId) {
-        return res.status(400).json({
-          message: "Provider is not Tamara-enabled",
-        });
+        return res
+          .status(400)
+          .json({ message: "Provider is not Tamara-enabled" });
       }
     }
 
@@ -316,9 +316,8 @@ export const createTamaraPayment = async (req, res) => {
       sessionId: sessionId || null,
       membershipPaymentId: membershipPaymentId || null,
       ...(safeVoucherPayload(voucherPayload)
-  ? { voucherPayload: safeVoucherPayload(voucherPayload) }
-  : {}),
-
+        ? { voucherPayload: safeVoucherPayload(voucherPayload) }
+        : {}),
     });
 
     res.json({
