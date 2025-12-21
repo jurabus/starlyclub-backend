@@ -1,112 +1,72 @@
 import mongoose from "mongoose";
 
-const paymentIntentSchema = new mongoose.Schema(
+const schema = new mongoose.Schema(
   {
-    /* ================= ACTOR ================= */
     userId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "Customer",
-      default: null,
+      required: true,
       index: true,
     },
 
-    providerId: {
+    orderId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "Provider",
-      default: null,
-      index: true,
+      required: true,
+      unique: true, // 🔒 HARD idempotency
     },
 
-    sessionId: {
-      type: String,
-      default: null,
-      index: true,
-    },
-
-    /* ================= PAYMENT TYPE ================= */
     type: {
       type: String,
       enum: [
-        "provider_purchase",   // products / vouchers
-        "membership_purchase", // memberships
+        "membership_purchase",
+        "subscription_charge",
+        "upgrade_proration",
       ],
       required: true,
-      index: true,
     },
 
-    /* ================= GATEWAY ================= */
-    gateway: {
-      type: String,
-      enum: ["tap", "tabby", "tamara"],
-      required: true,
-      index: true,
-    },
-
-    /* ================= MOCK MODE ================= */
-    isMock: {
-      type: Boolean,
-      default: false,
-      index: true,
-    },
-
-    /* ================= VOUCHER PAYLOAD ================= */
-    voucherPayload: {
-      faceValue: { type: Number },
-      discountPercent: { type: Number },
-      providerName: { type: String },
-      logoUrl: { type: String },
-    },
-
-    /* ================= AMOUNT ================= */
-    amount: {
+    amountCents: {
       type: Number,
       required: true,
-      min: 0,
     },
 
     currency: {
       type: String,
-      default: "SAR",
+      default: "EGP",
     },
 
-    /* ================= MEMBERSHIP LINK ================= */
-    membershipPaymentId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "MembershipPayment",
-      default: null,
-      index: true,
-    },
-
-    /* ================= PROVIDER / EXTERNAL ================= */
-    externalPaymentId: {
+    gateway: {
       type: String,
-      default: null,
-      index: true,
+      enum: ["paymob"],
+      default: "paymob",
     },
 
-    /* ================= STATUS ================= */
+    paymobOrderId: String,
+    paymobPaymentKey: String,
+    paymobTxnId: String,
+
+    cardToken: String,
+    cardLast4: String,
+    cardType: String,
+
     status: {
       type: String,
-      enum: ["pending", "paid", "failed", "cancelled"],
+      enum: ["pending", "paid", "failed", "refunded"],
       default: "pending",
       index: true,
     },
 
-    paidAt: {
-      type: Date,
-      default: null,
+    metadata: {
+      membershipPaymentId: mongoose.Schema.Types.ObjectId,
+      subscriptionId: mongoose.Schema.Types.ObjectId,
+      newPlanId: mongoose.Schema.Types.ObjectId,
+      billingCycle: Number,
+      cycle: { type: String, enum: ["monthly", "yearly"] },
     },
+
+    paidAt: Date,
+    refundedAt: Date,
   },
-  {
-    timestamps: true,
-  }
+  { timestamps: true }
 );
 
-/* ================= COMPOUND INDEXES ================= */
-// Fast webhook resolution
-paymentIntentSchema.index({ externalPaymentId: 1, gateway: 1 });
-
-// Prevent double-finalization
-paymentIntentSchema.index({ _id: 1, status: 1 });
-
-export default mongoose.model("PaymentIntent", paymentIntentSchema);
+export default mongoose.model("PaymentIntent", schema);

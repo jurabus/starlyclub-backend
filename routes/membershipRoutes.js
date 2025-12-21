@@ -1,4 +1,3 @@
-// routes/membershipRoutes.js
 import express from "express";
 import {
   createPlan,
@@ -9,29 +8,26 @@ import {
   assignMembership,
   getUserCard,
   scanMembership,
-  renewMembership,
-  createMembershipPayment
+  activateMembership,
 } from "../controllers/membershipController.js";
 
 const router = express.Router();
 
-/* ---------- Admin: Plans ---------- */
-router.post("/plans", createPlan);        // create plan
-router.post("/payment", createMembershipPayment);
+/* ---------- Plans ---------- */
+router.post("/plans", createPlan);
+router.get("/plans", listPlans);
+router.get("/plans/:id", getPlan);
+router.put("/plans/:id", updatePlan);
+router.delete("/plans/:id", deletePlan);
 
-router.post("/renew", renewMembership);
-router.get("/plans", listPlans);          // list plans
-router.get("/plans/:id", getPlan);        // get one plan
-router.put("/plans/:id", updatePlan);     // update plan
-router.delete("/plans/:id", deletePlan);  // delete plan
+/* ---------- Membership lifecycle ---------- */
+router.post("/assign", assignMembership); // admin only
+router.post("/activate", activateMembership);
 
-/* ---------- Admin: Assign membership to user ---------- */
-router.post("/assign", assignMembership);
-
-/* ---------- User: Get card + QR token ---------- */
+/* ---------- User ---------- */
 router.get("/card/:userId", getUserCard);
 
-/* ---------- Provider: Scan membership card ---------- */
+/* ---------- Provider ---------- */
 router.post("/scan", scanMembership);
 
 export default router;

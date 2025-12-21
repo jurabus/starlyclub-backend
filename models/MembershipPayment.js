@@ -1,11 +1,12 @@
 import mongoose from "mongoose";
 
-const membershipPaymentSchema = new mongoose.Schema(
+const schema = new mongoose.Schema(
   {
     userId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Customer",
       required: true,
+      index: true,
     },
 
     planId: {
@@ -14,18 +15,29 @@ const membershipPaymentSchema = new mongoose.Schema(
       required: true,
     },
 
-    gateway: {
-      type: String,
-      enum: ["tap", "tabby", "tamara"],
+    paymentIntentId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "PaymentIntent",
       required: true,
+      unique: true,
     },
 
     amount: {
       type: Number,
       required: true,
     },
-cycle: { type: String, enum: ["monthly", "yearly"], required: true },
-days: { type: Number, required: true },
+
+    cycle: {
+      type: String,
+      enum: ["monthly", "yearly"],
+      required: true,
+    },
+
+    days: {
+      type: Number,
+      required: true,
+    },
+
     status: {
       type: String,
       enum: ["pending", "paid", "failed"],
@@ -37,7 +49,4 @@ days: { type: Number, required: true },
   { timestamps: true }
 );
 
-export default mongoose.model(
-  "MembershipPayment",
-  membershipPaymentSchema
-);
+export default mongoose.model("MembershipPayment", schema);
