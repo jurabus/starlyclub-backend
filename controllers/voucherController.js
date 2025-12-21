@@ -126,3 +126,26 @@ export const adminListVouchers = async (_req, res) => {
     res.status(500).json({ success: false, message: err.message });
   }
 };
+/* ============================================================
+   USER: LIST OWN VOUCHERS
+   ============================================================ */
+export const getUserVouchers = async (req, res) => {
+  try {
+    const { userId } = req.query;
+
+    if (!userId) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Missing userId" });
+    }
+
+    const vouchers = await Voucher.find({ userId })
+      .populate("provider", "name logoUrl")
+      .sort({ createdAt: -1 });
+
+    res.json({ success: true, vouchers });
+  } catch (e) {
+    console.error("❌ getUserVouchers error:", e.message);
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
