@@ -110,3 +110,19 @@ export const purchaseVoucher = async (req, res) => {
     res.status(500).json({ success: false, message: err.message });
   }
 };
+/* ============================================================
+   ADMIN LIST VOUCHERS (READ ONLY)
+   ============================================================ */
+export const adminListVouchers = async (_req, res) => {
+  try {
+    const vouchers = await Voucher.find()
+      .populate("provider", "name logoUrl")
+      .populate("userId", "name email")
+      .sort({ createdAt: -1 });
+
+    res.json({ success: true, vouchers });
+  } catch (err) {
+    console.error("❌ adminListVouchers error:", err.message);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
