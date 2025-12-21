@@ -1,8 +1,12 @@
 import express from "express";
-import { createTapPayment, createTabbyPayment, createTamaraPayment } from "../controllers/paymentController.js";
+import { initiatePayment } from "../controllers/paymentController.js";
 
 const router = express.Router();
-router.post("/tap/create", createTapPayment);
-router.post("/tabby/create", createTabbyPayment);
-router.post("/tamara/create", createTamaraPayment);
+
+/**
+ * Unified payment initiation
+ * method: card | apple_pay | wallet | fawry
+ */
+router.post("/initiate", initiatePayment);
+
 export default router;
